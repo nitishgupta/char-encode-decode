@@ -1,0 +1,4 @@
+i met james hetfield yesterday .	PER O PER PER O O
+NASA faked the moon landing	ORG O O O O
+I want to work for NASA .	PER O O O O ORG O
+NASA is in pasadena , houston and cape carnaveral	ORG O O L O L O L L

@@ -1,17 +1,17 @@
 import pprint
-import cPickle
+import pickle
 import numpy as np
 
 pp = pprint.PrettyPrinter()
 
 def save_pkl(path, obj):
   with open(path, 'w') as f:
-    cPickle.dump(obj, f)
+    pickle.dump(obj, f)
     print(" [*] save %s" % path)
 
 def load_pkl(path):
   with open(path) as f:
-    obj = cPickle.load(f)
+    obj = pickle.load(f)
     print(" [*] load %s" % path)
     return obj
 

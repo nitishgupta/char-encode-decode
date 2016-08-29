@@ -98,8 +98,9 @@ class ENDEC(Model):
       self.decoder_input_en_laststate = tf.transpose(tf.pack(time_list_dec_input), perm=[1,0,2])
 
       # [batch_size, max_time, output_size]
-      self.dec_outputs, self.dec_states = tf.nn.dynamic_rnn(cell=self.decoder_network, inputs=self.decoder_input_en_laststate, 
-        sequence_length=self.dec_lengths, initial_state=self.en_states, dtype=tf.float32)
+      self.dec_in_states = self.en_states
+      self.dec_outputs, self.dec_out_states = tf.nn.dynamic_rnn(cell=self.decoder_network, inputs=self.decoder_input_en_laststate, 
+        sequence_length=self.dec_lengths, initial_state=self.dec_in_states, dtype=tf.float32)
       # [batch_size * dec_max_length , lstm_size]
       self.unfolded_dec_outputs = tf.reshape(self.dec_outputs, [-1, self.decoder_network.output_size])
 
@@ -156,8 +157,6 @@ class ENDEC(Model):
 
     print("Training epochs done: %d" % start)
 
-    
-
     for epoch in range(start, self.num_steps):
       epoch_loss = 0.
 
@@ -185,7 +184,6 @@ class ENDEC(Model):
       if epoch % 10 == 0:
         print("Epoch: [%2d] Traindata epoch: [%4d] time: %4.4f, loss: %.8f"
               % (epoch, self.reader.data_epochs[0], time.time() - start_time, loss))
-
 
       if epoch % 2 == 0:
         writer.add_summary(summary_str, epoch)
@@ -217,83 +215,74 @@ class ENDEC(Model):
     print("Input : ", t)
 
     feed_dict = {self.en_input: en_text_batch, 
-                 self.en_lengths: en_lengths
-                }
+                 self.en_lengths: en_lengths}
+
     # [batch_size=1, h_dim]
-    dec_in_states_list = self.get_states_list(self.dec_in_states, True)
-    print(dec_in_states_list)
-    fetches = self.sess.run([self.en_last_output] + dec_in_states_list,
+    dec_in_states_tensor_name = self.get_states_list(self.dec_in_states)
+    print("dec_in_states_names : ", dec_in_states_tensor_name)
+    fetches = self.sess.run([self.en_last_output] + dec_in_states_tensor_name,
                             feed_dict=feed_dict)
 
     en_last_output = fetches[0]
     el_states = fetches[1:]
-    print(el_states)
+    print("evaluated en last output : ", en_last_output)
+    print("evaluated dec in states : ", el_states)
+    dict_dec_in_states = self.get_states_dict(dec_in_states_tensor_name, el_states)
+    print("dict to feed : ", dict_dec_in_states)
 
     # Now start decoding
-    # decoded_sequence = []
-    # dec_in_char = self.reader.char2idx[self.reader.go]
+    decoded_sequence = []
+    curr_char = self.reader.char2idx[self.reader.go]
 
-    # dec_in_states_dict = self.get_states_dict(self.dec_in_states, True)
+    while curr_char != self.reader.char2idx[self.reader.char_eos]:
+      # dec_in_batch is a batch 1 and length 1 sequence
+      print("in : ", self.reader.idx2char[curr_char])
+       
+      dec_out_states_names = self.get_states_list(self.dec_out_states)
+      dec_feed_dict = {self.dec_input: [[curr_char]],
+                       self.dec_lengths: [1],
+                       self.en_last_output: en_last_output}
+      dec_feed_dict.update(dict_dec_in_states)
+      fetches = self.sess.run([self.raw_scores] + dec_out_states_names, 
+                             feed_dict=dec_feed_dict)
+      raw_scores = fetches[0]
+      dec_out_states_evaluated = fetches[1:]
+      dict_dec_in_states = self.get_states_dict(dec_in_states_tensor_name, 
+                                                dec_out_states_evaluated)
+      print(raw_scores)
+      char_ids = np.argmax(raw_scores, axis=2)
+      curr_char = char_ids[0,0]
+      print("out : ", self.reader.idx2char[curr_char])
+      decoded_sequence.append(curr_char)
 
-    # while dec_in_char != self.reader.char2idx[self.reader.char_eos]:
-    #   # dec_in_batch is a batch 1 and length 1 sequence
-    #   print("in : ", self.reader.idx2char[dec_in_char])
-    #   dec_in_batch = [[dec_in_char]]
-    #   embedded_char = tf.nn.embedding_lookup(self.char_embeddings, dec_in_batch)
-    #   dec_input_state = tf.placeholder()
 
-    #   feed_dict = {self.en_last_output: en_last_output,
-    #                self.dec_input: dec_in_batch,
-    #                self.dec_lengths: [1]
-    #               }
-    #   feed_dict.update(dec_in_states_dict)
-    #   fetch = [self.raw_scores] + self.get_states_list(dec_states, True)
+    print(decoded_sequence)
+    t, tt = self.reader.charidx_to_text(decoded_sequence)
+    print(tt)
 
-    #   ret = self.sess.run(fetch, feed_dict=feed_dict)
-    #   raw_scores = ret[0]
-    #   states = ret[1:]
-    #   dec_in_states_dict = dict(zip(en_final_states_list, states))
-
-    #   char_ids = np.argmax(raw_scores, axis=2)
-    #   dec_in_char = char_ids[0,0]
-    #   print("out : ", self.reader.idx2char[dec_in_char])
-    #   decoded_sequence.append(dec_in_char)
-
-    # print(decoded_sequence)
-    # t, tt = self.reader.charidx_to_text(decoded_sequence)
-    # print(tt)
-
-  def get_states_list(self, states, state_is_tuple):
+  def get_states_list(self, states):
     """
     given a 'states' variable from a tensorflow model,
     return a flattened list of states
     """
-    if state_is_tuple:
-      states_list = [] # flattened list of all tensors in states
-      for layer in states:
-        print(layer)
-        for state in layer:
-          print(state)
-          states_list.append(state)
-    else:
-      states_list = [states]
+    states_list = [] # flattened list of all tensors in states
+    for layer in states:
+      for state in layer:
+        states_list.append(state)
 
     return states_list
 
 
-  def get_states_dict(self, states, state_is_tuple):
+  def get_states_dict(self, states_name, states_evaluated):
     """
     given a 'states' variable from a tensorflow model,
     return a dict of { tensor : evaluated value }
     """
-    if state_is_tuple:
-        states_dict = {} # dict of { tensor : value } 
-        for layer in states:
-            for state in layer:
-                states_dict[state] = state.eval()
-
-    else:
-        states_dict = {states : states.eval()}
+    states_dict = {} # dict of { tensor : value } 
+    layer_num = 0
+    state_num = 0
+    for i, state_name in enumerate(states_name):
+      states_dict[state_name] = states_evaluated[i]
 
     return states_dict
 

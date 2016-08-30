@@ -2,7 +2,7 @@ import time
 import tensorflow as tf
 import numpy as np
 
-from base import Model
+from models.base import Model
 
 class SEQLABEL(Model):
   """Neural Answer Selection Model"""

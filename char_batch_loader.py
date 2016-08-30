@@ -66,57 +66,67 @@ class CharBatchLoader(object):
 
     return text, ''.join(text)
 
+  def _read_line(self, data_idx):
+    line = self.dataf[data_idx].readline()
+    # End of file reached, refresh train file
+    if line == '':
+      self.data_epochs[data_idx] += 1
+      self.dataf[data_idx].close()
+      self.dataf[data_idx] = open(self.input_fnames[data_idx])
+      line = self.dataf[data_idx].readline()
+    return line
+
+  def _get_text_2_charidx(self, words, encoder_text):
+    '''Converts text (as list of words) into char ids
+    A char id for space is added after each word in the words list.
+    Encoder text is appended with a <eos> character
+    Decoder text is pre-pended with a <go> character and appended with <eos>
+
+    Args: 
+      words: list of words
+      encoder_text: Boolean to tell if encoder text or not.
+    '''
+    char_idx = []
+    if not encoder_text:
+      char_idx.append(self.char2idx[self.go])
+
+    for i, word in enumerate(words):
+      if i != 0:
+        char_idx.append(self.char2idx[' '])  
+      for char in word:
+        if not self.char2idx.has_key(char):
+          char_idx.append(self.char2idx['<unk_char>'])
+        else:
+          char_idx.append(self.char2idx[char])
+    char_idx.append(self.char2idx['<eos>'])
+    return char_idx
+
+  def next_inference_text(self):
+    #data_idx = 2
+    line = self._read_line(2).strip()
+    words = line.strip().split()
+    en_char_idx = self._get_text_2_charidx(words, True)
+    #batch of size 1
+    return [en_char_idx], [len(en_char_idx)]
+
   def _next_batch(self, data_idx):
     '''Gets the next batch of training/testing/val data
 
     Args:
       data_idx: Indexes the dataset partition. 0: train, 1: valid, 2: test
     '''
-    def _read_line():
-      line = self.dataf[data_idx].readline()
-      # End of file reached, refresh train file
-      if line == '':
-        self.data_epochs[data_idx] += 1
-        self.dataf[data_idx].close()
-        self.dataf[data_idx] = open(self.input_fnames[data_idx])
-        line = self.dataf[data_idx].readline()
-      return line
-
-    def _get_text_2_charidx(words, encoder_text):
-      '''Converts text (as list of words) into char ids
-      A char id for space is added after each word in the words list.
-      Encoder text is appended with a <eos> character
-      Decoder text is pre-pended with a <go> character and appended with <eos>
-
-      Args: 
-        words: list of words
-        encoder_text: Boolean to tell if encoder text or not.
-      '''
-      char_idx = []
-      if not encoder_text:
-        char_idx.append(self.char2idx[self.go])
-
-      for i, word in enumerate(words):
-        if i != 0:
-          char_idx.append(self.char2idx[' '])  
-        for char in word:
-          if not self.char2idx.has_key(char):
-            char_idx.append(self.char2idx['<unk_char>'])
-          else:
-            char_idx.append(self.char2idx[char])
-      char_idx.append(self.char2idx['<eos>'])
-      return char_idx
-
     en_text_batch, dec_in_text_batch, dec_out_text_batch = [], [], []
+
     while len(en_text_batch) < self.batch_size:
-      line = _read_line().strip()
+      line = self._read_line(data_idx).strip()
+
       assert len(line.split("\t")) == 2
       [in_text, out_text] = line.split("\t")
       in_text, out_text = in_text.strip(), out_text.strip()
       in_words, out_words = in_text.split(), out_text.split()
 
-      en_char_idx = _get_text_2_charidx(in_words, True)
-      dec_char_idx = _get_text_2_charidx(out_words, False)
+      en_char_idx = self._get_text_2_charidx(in_words, True)
+      dec_char_idx = self._get_text_2_charidx(out_words, False)
       dec_in_char_idx = dec_char_idx[:-1]
       dec_out_char_idx = dec_char_idx[1:]
 

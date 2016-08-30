@@ -2,7 +2,7 @@ import time
 import tensorflow as tf
 import numpy as np
 
-from base import Model
+from models.base import Model
 
 
 
@@ -105,10 +105,12 @@ class ENDEC(Model):
       self.unfolded_dec_outputs = tf.reshape(self.dec_outputs, [-1, self.decoder_network.output_size])
 
       # [batch_size * max_length, char_vocab_size]
-      self.char_size_lin_proj = tf.nn.rnn_cell._linear(self.unfolded_dec_outputs, len(self.reader.idx2char), bias=True)
-      # self.dec_raw_char_scores = tf.nn.relu(self.char_size_lin_proj)
-      self.dec_raw_char_scores = self.char_size_lin_proj
-      self.raw_scores = tf.reshape(self.dec_raw_char_scores, shape=[self.batch_size, -1, len(self.reader.idx2char)])
+      self.dec_raw_char_scores = tf.nn.rnn_cell._linear(self.unfolded_dec_outputs, 
+                                                        len(self.reader.idx2char), 
+                                                        bias=True)
+      self.raw_scores = tf.reshape(self.dec_raw_char_scores, 
+                                   shape=[self.batch_size, -1, len(self.reader.idx2char)], 
+                                   name="raw_scores")
 
   def loss_graph(self):
     def get_mask():
@@ -194,10 +196,21 @@ class ENDEC(Model):
         char_ids = np.argmax(raw_scores, axis=2)
         for c_id in char_ids:
           t, tt = self.reader.charidx_to_text(c_id)
-          print(tt)
+          print(tt) 
         for c_id in dec_out_text_batch:
           t, tt = self.reader.charidx_to_text(c_id)
           print(tt)
+
+  def encoder(self, input_text_charidx, input_text_length):
+    feed_dict = {self.en_input: input_text_charidx, 
+                 self.en_lengths: input_text_length}
+    # [batch_size=1, h_dim]
+    dec_in_states_tensornames = self.get_states_list(self.dec_in_states)
+    fetches = self.sess.run([self.en_last_output] + dec_in_states_tensornames,
+                            feed_dict=feed_dict)
+    en_last_output = fetches[0]
+    el_states = fetches[1:]
+    return en_last_output, el_states, dec_in_states_tensornames
 
   def inference(self, config):
     assert self.batch_size == 1,  "Batch size should be 1 during inference."
@@ -206,29 +219,14 @@ class ENDEC(Model):
     global_step = self.global_step.eval()
     print("Training epochs done: %d" % global_step)
 
-    # Change to reading from inference batch maker - that only has en_text and 
-    # en_lengths
-    (en_text_batch, en_lengths, dec_in_text_batch, 
-       dec_out_text_batch, dec_lengths) = self.reader.next_train_batch()
+    (en_text_batch, en_lengths) = self.reader.next_inference_text()
+    (en_text_batch, en_lengths) = self.reader.next_inference_text()
 
     _, t = self.reader.charidx_to_text(en_text_batch[0])
     print("Input : ", t)
 
-    feed_dict = {self.en_input: en_text_batch, 
-                 self.en_lengths: en_lengths}
-
-    # [batch_size=1, h_dim]
-    dec_in_states_tensor_name = self.get_states_list(self.dec_in_states)
-    print("dec_in_states_names : ", dec_in_states_tensor_name)
-    fetches = self.sess.run([self.en_last_output] + dec_in_states_tensor_name,
-                            feed_dict=feed_dict)
-
-    en_last_output = fetches[0]
-    el_states = fetches[1:]
-    print("evaluated en last output : ", en_last_output)
-    print("evaluated dec in states : ", el_states)
-    dict_dec_in_states = self.get_states_dict(dec_in_states_tensor_name, el_states)
-    print("dict to feed : ", dict_dec_in_states)
+    en_last_output, el_states, dec_in_states_tensornames = self.encoder(en_text_batch, en_lengths)
+    dict_dec_in_states = self.get_states_dict(dec_in_states_tensornames, el_states)
 
     # Now start decoding
     decoded_sequence = []
@@ -236,29 +234,28 @@ class ENDEC(Model):
 
     while curr_char != self.reader.char2idx[self.reader.char_eos]:
       # dec_in_batch is a batch 1 and length 1 sequence
-      print("in : ", self.reader.idx2char[curr_char])
-       
+      
+      # get output states tensor names to fetch 
       dec_out_states_names = self.get_states_list(self.dec_out_states)
       dec_feed_dict = {self.dec_input: [[curr_char]],
-                       self.dec_lengths: [1],
+                       self.dec_lengths: [self.batch_size],
                        self.en_last_output: en_last_output}
       dec_feed_dict.update(dict_dec_in_states)
       fetches = self.sess.run([self.raw_scores] + dec_out_states_names, 
                              feed_dict=dec_feed_dict)
       raw_scores = fetches[0]
       dec_out_states_evaluated = fetches[1:]
-      dict_dec_in_states = self.get_states_dict(dec_in_states_tensor_name, 
+      # Current output state tensor as input to next time step
+      dict_dec_in_states = self.get_states_dict(dec_in_states_tensornames,
                                                 dec_out_states_evaluated)
-      print(raw_scores)
+
       char_ids = np.argmax(raw_scores, axis=2)
       curr_char = char_ids[0,0]
-      print("out : ", self.reader.idx2char[curr_char])
       decoded_sequence.append(curr_char)
-
 
     print(decoded_sequence)
     t, tt = self.reader.charidx_to_text(decoded_sequence)
-    print(tt)
+    print(t)
 
   def get_states_list(self, states):
     """

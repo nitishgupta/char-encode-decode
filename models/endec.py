@@ -7,7 +7,7 @@ from models.base import Model
 
 
 class ENDEC(Model):
-  """Neural Answer Selection Model"""
+  """Char-Level Encoder Decoder RNN"""
 
   def __init__(self, sess, reader, dataset, num_layers,
                num_steps, embed_dim, h_dim, learning_rate, checkpoint_dir):
@@ -50,17 +50,15 @@ class ENDEC(Model):
     self.dec_output = tf.placeholder(tf.int32, [batch_size, None], name="decoder_output_sequence")
     self.dec_lengths = tf.placeholder(tf.int32, [batch_size], name="decoder_lengths")
     
-    
     self.encoder_max_length = tf.shape(self.en_input)[1]
     self.decoder_max_length = tf.shape(self.dec_input)[1]
 
     with tf.variable_scope("encoder_decoder") as scope:
-      with tf.device("/cpu:0"):
+      with tf.device("/gpu:0"):
         self.char_embeddings = tf.get_variable("char_embed", [len(self.reader.idx2char), self.embed_dim])
     
     self.build_encoder_network()
     self.build_decoder_network()
-
     
   def build_encoder_network(self):
     with tf.variable_scope("encoder") as scope:
@@ -88,8 +86,9 @@ class ENDEC(Model):
       decoder_cell = tf.nn.rnn_cell.BasicLSTMCell(self.h_dim, state_is_tuple=True)
       self.decoder_network = tf.nn.rnn_cell.MultiRNNCell([decoder_cell] * self.num_layers, state_is_tuple=True)
 
-      # [batch_size, max_time, embedding_dim]
-      self.embedded_decoder_input_sequences = tf.nn.embedding_lookup(self.char_embeddings, self.dec_input)
+      with tf.device("/gpu:0"):
+        # [batch_size, max_time, embedding_dim]
+        self.embedded_decoder_input_sequences = tf.nn.embedding_lookup(self.char_embeddings, self.dec_input)
       '''Append en_last_output to all time_steps of decoder input'''
       embedded_decoder_input_sequences_transposed = tf.transpose(self.embedded_decoder_input_sequences, perm=[1,0,2])
       time_list_dec_input = tf.map_fn(lambda x : tf.concat(concat_dim=1, values=[x, self.en_last_output]), 
@@ -104,10 +103,17 @@ class ENDEC(Model):
       # [batch_size * dec_max_length , lstm_size]
       self.unfolded_dec_outputs = tf.reshape(self.dec_outputs, [-1, self.decoder_network.output_size])
 
-      # [batch_size * max_length, char_vocab_size]
-      self.dec_raw_char_scores = tf.nn.rnn_cell._linear(self.unfolded_dec_outputs, 
-                                                        len(self.reader.idx2char), 
-                                                        bias=True)
+      # Linear projection to num_chars [batch_size * max_length, char_vocab_size]
+      self.decoderW = tf.get_variable(shape=[self.decoder_network.output_size, len(self.reader.idx2char)], 
+                                      initializer= tf.random_normal_initializer(stddev=1.0/np.sqrt(self.decoder_network.output_size)), 
+                                      name="decoder_linear_proj_weights", dtype=tf.float32)
+      self.decoderB = tf.get_variable(shape=[len(self.reader.idx2char)], 
+                                      initializer= tf.constant_initializer(), 
+                                      name="decoder_linear_proj_bias", dtype=tf.float32)
+      # self.dec_raw_char_scores = tf.nn.rnn_cell._linear(self.unfolded_dec_outputs, 
+      #                                                   len(self.reader.idx2char), 
+      #                                                   bias=True)
+      self.dec_raw_char_scores = tf.matmul(self.unfolded_dec_outputs, self.decoderW) + self.decoderB
       self.raw_scores = tf.reshape(self.dec_raw_char_scores, 
                                    shape=[self.batch_size, -1, len(self.reader.idx2char)], 
                                    name="raw_scores")
@@ -213,9 +219,10 @@ class ENDEC(Model):
     return en_last_output, el_states, dec_in_states_tensornames
 
   def inference(self, config):
-    assert self.batch_size == 1,  "Batch size should be 1 during inference."
+    assert self.batch_size == 1,  "Batch size should be 1 during inference."  
     
     self.load(config.checkpoint_dir)
+
     global_step = self.global_step.eval()
     print("Training epochs done: %d" % global_step)
 

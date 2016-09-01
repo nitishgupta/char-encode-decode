@@ -4,9 +4,9 @@ import tensorflow as tf
 np.set_printoptions(threshold=np.inf)
 
 from utils import pp
-from batch_loader import BatchLoader
-from char_batch_loader import CharBatchLoader
-from clustering_data_loader import ClusteringDataLoader
+from readers.batch_loader import BatchLoader
+from readers.char_batch_loader import CharBatchLoader
+from readers.clustering_data_loader import ClusteringDataLoader
 from models.seqlabel import SEQLABEL
 from models.endec import ENDEC
 from models.clustering_vae import Clustering_VAE
@@ -54,8 +54,9 @@ def main(_):
                 num_steps=FLAGS.max_steps, embed_dim=FLAGS.embed_dim, h_dim=FLAGS.h_dim,
                 learning_rate=FLAGS.learning_rate, checkpoint_dir=FLAGS.checkpoint_dir)
     else:
-      model = m(sess, reader, dataset=FLAGS.dataset, num_clusters=2, num_layers=FLAGS.num_layers, 
-                num_steps=FLAGS.max_steps, layer_dim=5, h_dim=FLAGS.h_dim,
+      model = m(sess, reader, dataset=FLAGS.dataset, num_clusters=2, 
+                num_layers=FLAGS.num_layers, num_steps=FLAGS.max_steps, 
+                h_dim=FLAGS.h_dim, embed_dim=FLAGS.embed_dim,
                 learning_rate=FLAGS.learning_rate, checkpoint_dir=FLAGS.checkpoint_dir)
 
     if FLAGS.inference:

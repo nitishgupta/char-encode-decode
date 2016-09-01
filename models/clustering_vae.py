@@ -10,18 +10,20 @@ class Clustering_VAE(Model):
   """Unsupervised Clustering using Discrete-State VAE"""
 
   def __init__(self, sess, reader, dataset, num_clusters, num_layers, 
-               num_steps, layer_dim, h_dim, learning_rate, checkpoint_dir):
+               num_steps, h_dim, embed_dim, learning_rate, checkpoint_dir):
     self.sess = sess
     self.reader = reader
     self.dataset = dataset
 
     self.num_clusters = num_clusters
-
     self.num_layers = num_layers
-    self.layer_dim = layer_dim
-    self.data_dimensions = reader.data_dimensions
-    # Dimensionality in which cluster ids are represented
+
+    # Size of hidden layers
     self.h_dim = h_dim
+    # Dimensionality in which cluster ids are represented
+    self.embed_dim = embed_dim
+    
+    self.data_dimensions = reader.data_dimensions
 
     self.max_steps = num_steps
     self.batch_size = reader.batch_size
@@ -34,7 +36,7 @@ class Clustering_VAE(Model):
 
     
     # self._attrs=["batch_size", "embed_dim", "h_dim", "learning_rate"]
-    self._attrs=["data_dimensions", "layer_dim", "num_layers", "h_dim"]
+    self._attrs=["data_dimensions", "embed_dim", "h_dim", "num_layers"]
 
     # raise Exception(" [!] Working in progress")
     self.build_model(batch_size=self.batch_size)
@@ -46,8 +48,9 @@ class Clustering_VAE(Model):
                       name="x_input")
 
       self.cluster_embeddings = tf.get_variable(
-        name="cluster_embed", shape=[self.num_clusters, self.h_dim], 
-        initializer=tf.random_normal_initializer(mean=0.0, stddev=1/(self.num_clusters+self.h_dim)))
+        name="cluster_embed", shape=[self.num_clusters, self.embed_dim], 
+        initializer=tf.random_normal_initializer(mean=0.0, 
+                                                 stddev=1/(self.num_clusters+self.embed_dim)))
     
     self.build_encoder_network()
     self.build_decoder_network()
@@ -64,17 +67,17 @@ class Clustering_VAE(Model):
                                        initializer=tf.constant_initializer())
       else:
         self.enc_initial_weights = tf.get_variable(name="initial_weights", 
-                                       shape=[self.data_dimensions, self.layer_dim], 
+                                       shape=[self.data_dimensions, self.h_dim], 
                                        initializer=tf.random_normal_initializer(
-                                        mean=0.0, stddev=2.0/(self.data_dimensions+self.layer_dim)))
+                                        mean=0.0, stddev=2.0/(self.data_dimensions+self.h_dim)))
         self.enc_initial_bias = tf.get_variable(name="initial_bias", 
-                                       shape=[self.layer_dim], 
+                                       shape=[self.h_dim], 
                                        initializer=tf.constant_initializer())
 
         self.enc_final_weights = tf.get_variable(name="final_weights", 
-                                       shape=[self.layer_dim, self.num_clusters], 
+                                       shape=[self.h_dim, self.num_clusters], 
                                        initializer=tf.random_normal_initializer(
-                                        mean=0.0, stddev=2.0/(self.num_clusters+self.layer_dim)))
+                                        mean=0.0, stddev=2.0/(self.num_clusters+self.h_dim)))
         self.enc_final_bias = tf.get_variable(name="final_bias", 
                                        shape=[self.num_clusters], 
                                        initializer=tf.constant_initializer())
@@ -83,11 +86,11 @@ class Clustering_VAE(Model):
         self.enc_internal_biases = []
         for i in range(1, self.num_layers - 1):
           w = tf.get_variable(name="internal_weights" + str(i), 
-                              shape=[self.layer_dim, self.layer_dim], 
+                              shape=[self.h_dim, self.h_dim], 
                               initializer=tf.random_normal_initializer(
-                                mean=0.0, stddev=2.0/(2.0*self.layer_dim)))
+                                mean=0.0, stddev=2.0/(2.0*self.h_dim)))
           b = tf.get_variable(name="final_bias" + str(i), 
-                              shape=[self.layer_dim], 
+                              shape=[self.h_dim], 
                               initializer=tf.constant_initializer())
 
           self.enc_internal_weight_matrices.append(w)
@@ -107,7 +110,7 @@ class Clustering_VAE(Model):
     with tf.variable_scope("decoder") as scope:
       if self.num_layers == 1:
         self.dec_initial_weights = tf.get_variable(name="initial_weights", 
-                                       shape=[self.h_dim, self.data_dimensions], 
+                                       shape=[self.embed_dim, self.data_dimensions], 
                                        initializer=tf.random_normal_initializer(
                                         mean=0.0, stddev=2.0/(self.data_dimensions+self.h_dim)))
         self.dec_initial_bias = tf.get_variable(name="initial_bias", 
@@ -115,17 +118,17 @@ class Clustering_VAE(Model):
                                        initializer=tf.constant_initializer())
       else:
         self.dec_initial_weights = tf.get_variable(name="initial_weights", 
-                                       shape=[self.h_dim, self.layer_dim], 
+                                       shape=[self.embed_dim, self.h_dim], 
                                        initializer=tf.random_normal_initializer(
-                                        mean=0.0, stddev=2.0/(self.h_dim+self.layer_dim)))
+                                        mean=0.0, stddev=2.0/(self.h_dim+self.h_dim)))
         self.dec_initial_bias = tf.get_variable(name="initial_bias", 
-                                       shape=[self.layer_dim], 
+                                       shape=[self.h_dim], 
                                        initializer=tf.constant_initializer())
 
         self.dec_final_weights = tf.get_variable(name="final_weights", 
-                                       shape=[self.layer_dim, self.data_dimensions], 
+                                       shape=[self.h_dim, self.data_dimensions], 
                                        initializer=tf.random_normal_initializer(
-                                        mean=0.0, stddev=2.0/(self.data_dimensions+self.layer_dim)))
+                                        mean=0.0, stddev=2.0/(self.data_dimensions+self.h_dim)))
         self.dec_final_bias = tf.get_variable(name="final_bias", 
                                        shape=[self.data_dimensions], 
                                        initializer=tf.constant_initializer())
@@ -134,11 +137,11 @@ class Clustering_VAE(Model):
         self.dec_internal_biases = []
         for i in range(1, self.num_layers - 1):
           w = tf.get_variable(name="internal_weights" + str(i), 
-                              shape=[self.layer_dim, self.layer_dim], 
+                              shape=[self.h_dim, self.h_dim], 
                               initializer=tf.random_normal_initializer(
-                                mean=0.0, stddev=2.0/(2.0*self.layer_dim)))
+                                mean=0.0, stddev=2.0/(2.0*self.h_dim)))
           b = tf.get_variable(name="final_bias" + str(i), 
-                              shape=[self.layer_dim], 
+                              shape=[self.h_dim], 
                               initializer=tf.constant_initializer())
 
           self.dec_internal_weight_matrices.append(w)
@@ -174,7 +177,8 @@ class Clustering_VAE(Model):
       self.total_loss = self.reconstruct_loss + self.entropy_loss
 
       self.optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate)
-      self.grads_and_vars = self.optimizer.compute_gradients(self.total_loss, tf.trainable_variables())
+      self.grads_and_vars = self.optimizer.compute_gradients(self.total_loss, 
+                                                             tf.trainable_variables())
       self.optim_op = self.optimizer.apply_gradients(self.grads_and_vars)
 
       _ = tf.scalar_summary("reconstruct_loss", self.reconstruct_loss)
@@ -222,7 +226,7 @@ class Clustering_VAE(Model):
       self.global_step.assign(epoch).eval()
       # print([var.name for var in tf.all_variables()])
       # epoch_loss += loss
-      if epoch % 1000 == 0:
+      if epoch % 100 == 0:
         print("Epoch: [%2d] Traindata epoch: [%4d] time: %4.4f, loss: %.8f"
               % (epoch, self.reader.data_epochs[0], time.time() - start_time, total_loss))
         print("data")
@@ -243,9 +247,11 @@ class Clustering_VAE(Model):
         self.save(self.checkpoint_dir, self.global_step)
 
   def inference_graph(self, cluster_num):
-    cluster_embedding = tf.nn.embedding_lookup(self.cluster_embeddings, cluster_num)
+    cluster_embedding = tf.nn.embedding_lookup(self.cluster_embeddings, 
+                                               cluster_num)
 
-    decoder_output = tf.matmul(cluster_embedding, self.dec_initial_weights) + self.dec_initial_bias
+    decoder_output = tf.matmul(cluster_embedding, 
+                               self.dec_initial_weights) + self.dec_initial_bias
     if self.num_layers > 1:
       output = decoder_output
       for layer in range(0, len(self.dec_internal_weight_matrices)):

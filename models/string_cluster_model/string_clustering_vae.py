@@ -6,6 +6,7 @@ from models.base import Model
 from models.string_cluster_model.encoder_network import EncoderModel
 from models.string_cluster_model.decoder_network import DecoderModel
 from models.string_cluster_model.cluster_posterior_dist import ClusterPosteriorDistribution
+from models.string_cluster_model.loss_graph import LossGraph
 
 
 
@@ -59,7 +60,7 @@ class String_Clustering_VAE(Model):
                                    input_lengths=self.text_lengths,
                                    char_embeddings=self.char_embeddings)
 
-      self.cluster_posterior_distribution = ClusterPosteriorDistribution(
+      self.posterior_model = ClusterPosteriorDistribution(
         batch_size=self.batch_size,
         num_layers=self.ff_num_layers,
         h_dim=self.ff_hidden_layer_size,
@@ -67,18 +68,13 @@ class String_Clustering_VAE(Model):
         num_clusters=self.num_clusters,
         input_batch=self.encoder_model.encoder_last_output)
 
+      sum1 = tf.reduce_sum(self.posterior_model.cluster_posterior_dist)
+      _ = tf.scalar_summary("sum1", sum1)
+
       self.decoder_models = []
       for cluster_num in range(0, self.num_clusters):
         if cluster_num > 0:
           scope.reuse_variables()
-        # Slice cluster embedding
-        cluster_embedding = tf.slice(input_=self.cluster_embeddings,
-                                     begin=[cluster_num,0],
-                                     size=[1,self.cluster_embed_dim],
-                                     name="cluster_embed_"+str(cluster_num))
-        cluster_embedding = tf.reshape(cluster_embedding,
-                                       [self.cluster_embed_dim])
-        cluster_embedding = tf.pack(self.batch_size * [cluster_embedding])
 
         # TODO : Pass the posterior prob of cluster and weigh score with that
         self.decoder_models.append(
@@ -89,7 +85,9 @@ class String_Clustering_VAE(Model):
                        dec_input_lengths=self.text_lengths,
                        num_char_vocab=self.num_chars,
                        char_embeddings=self.char_embeddings,
-                       cluster_embedding=cluster_embedding)
+                       cluster_embeddings=self.cluster_embeddings,
+                       cluster_num=cluster_num
+          )
         )
 
 
@@ -117,85 +115,22 @@ class String_Clustering_VAE(Model):
       initializer=tf.random_normal_initializer(
         mean=0.0, stddev=1.0/(self.num_clusters+self.cluster_embed_dim)))
 
-  # def loss_graph(self):
-  #   def get_mask():
-  #     decoder_max_length = tf.shape(self.in_text)[1]
-  #     mask = []
-  #     for l in tf.unpack(self.text_lengths):
-  #       l = tf.reshape(l, [1])
-  #       mask_l = tf.concat(0,
-  #                          [tf.ones(l, dtype=tf.int32),
-  #                           tf.zeros(decoder_max_length - l,
-  #                           dtype=tf.int32)])
-  #       mask.append(mask_l)
-  #     mask_indicators = tf.to_float(tf.reshape(tf.pack(mask), [-1]))
-  #     return mask_indicators
-
-  #   # [batch_size * max_length]
-  #   self.dec_true_char_ids = tf.reshape(self.in_text, [-1])
-
-  #   mask = get_mask()
-  #   with tf.variable_scope("string_clustering_vae_loss") as s:
-  #     self.decoding_losses_list = []
-  #     for cluster_num in self.num_clusters:
-  #         # decoder_models[cluster_num].dec_raw_char_scores : [batch_size * max_length, char_vocab_size]
-  #         cluster_loss_flat = tf.nn.seq2seq.sequence_loss_by_example(
-  #           logits=[decoder_models[cluster_num].dec_raw_char_scores],
-  #           targets=[self.dec_true_char_ids],
-  #           weights=[self.mask],
-  #           average_across_timesteps=False)
-
-  #         cluster_loss_each_time_step = tf.reshape(cluster_loss_flat,
-  #                                                  [self.batch_size,
-  #                                                   self.decoder_max_length])
-  #         # [batch_size]
-  #         cluster_loss_batch = tf.reduce_sum(
-  #           cluster_loss_each_time_step, [1]) / tf.to_float(self.dec_lengths)
-
-  #         self.decoding_losses_list.append(cluster_loss_batch)
-  #     self.decoding_loss = tf.pack(values=self.decoding_losses_list,
-  #                                  name="batch_loss_each_cluster")
-
-
-  #       self.optim = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(self.loss)
-
-  #   _ = tf.scalar_summary("loss", self.loss)
-  # def loss_graph(self):
-  #   # Reconstruction loss
-  #   with tf.variable_scope("reconstruction_loss") as scope:
-  #     ''' Expected P(X|Z) under the posterior distribution Q(Z|X): self.cluster_probs'''
-  #     # [batch_size, data_dimensions]
-  #     self.E_Q_PX = tf.matmul(self.cluster_probs, self.reconstructed_x)
-
-  #     squared_diff = tf.squared_difference(self.x_input, self.E_Q_PX,
-  #                                          name="reconstruct_squared_diff")
-  #     self.reconstruct_loss = tf.reduce_sum(squared_diff,
-  #                                           name="reconstruct_loss") / self.batch_size
-
-  #     # Want to maximize entropy i.e. push towards uniform posterior
-  #     self.entropy_loss = -tf.reduce_sum(tf.mul(tf.log(self.cluster_probs),
-  #                                               self.cluster_probs),
-  #                                        name="posterior_entropy") / self.batch_size
-
-  #     self.total_loss = self.reconstruct_loss + self.entropy_loss
-
-  #     self.optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate)
-  #     self.grads_and_vars = self.optimizer.compute_gradients(self.total_loss,
-  #                                                            tf.trainable_variables())
-  #     self.optim_op = self.optimizer.apply_gradients(self.grads_and_vars)
-
-  #     _ = tf.scalar_summary("reconstruct_loss", self.reconstruct_loss)
-  #     _ = tf.scalar_summary("entropy_loss", self.entropy_loss)
-  #     _ = tf.scalar_summary("total_loss", self.total_loss)
 
   def train(self, config):
     # Make the loss graph
-    # self.loss_graph()
+    self.loss_graph = LossGraph(batch_size=self.batch_size,
+                                input_text=self.in_text,
+                                text_lengths=self.text_lengths,
+                                decoder_models=self.decoder_models,
+                                posterior_model=self.posterior_model,
+                                num_clusters=self.num_clusters,
+                                learning_rate=self.learning_rate)
 
     start_time = time.time()
 
     merged_sum = tf.merge_all_summaries()
-    writer = tf.train.SummaryWriter("./logs/", self.sess.graph)
+    log_dir = self.get_log_dir(root_log_dir="./logs/")
+    writer = tf.train.SummaryWriter(log_dir, self.sess.graph)
 
     # First initialize all variables then loads checkpoints
     self.sess.run(tf.initialize_all_variables())
@@ -216,42 +151,49 @@ class String_Clustering_VAE(Model):
       feed_dict = {self.in_text: orig_text_batch,
                    self.dec_input_batch: dec_in_text_batch,
                    self.text_lengths: text_lengths}
-
-      (c_p_d,
-       ) = self.sess.run([self.cluster_posterior_distribution.cluster_posterior_dist,
-                          ],
-                          feed_dict=feed_dict)
+      fetches = [self.posterior_model.cluster_posterior_dist,
+                 self.loss_graph.decoding_losses_average,
+                 self.loss_graph.entropy_loss,
+                 self.loss_graph.total_loss,
+                 self.loss_graph.decoding_losses_each_cluster]
+      (fetches,
+       _,
+       summary_str) = self.sess.run([fetches,
+                                     self.loss_graph.optim_op,
+                                     merged_sum],
+                                    feed_dict=feed_dict)
 
       self.global_step.assign(epoch).eval()
-      print("\nAll Variables")
-      for var in tf.all_variables():
-        print(var.name)
-      print("\nTrainable Variables")
-      for var in tf.trainable_variables():
-        print(var.name)
-      print("\n")
 
-      print(c_p_d)
+      [cluster_posterior_dist,
+       decoding_losses_average,
+       entropy_loss,
+       total_loss,
+       decoding_losses_each_cluster] = fetches
 
-      # if epoch % 100 == 0:
-      #   print("Epoch: [%2d] Traindata epoch: [%4d] time: %4.4f, loss: %.8f"
-      #         % (epoch, self.reader.data_epochs[0], time.time() - start_time, total_loss))
-      #   print("data")
-      #   print(data_batch)
-      #   print("rec_x")
-      #   print(re_x)
-      #   print("Cluster Probs")
-      #   print(cluster_probs)
-      #   print("Reconstruct, Entropy, Total Loss : ")
-      #   print(reconstruct_loss)
-      #   print(entropy_loss)
-      #   print(total_loss)
+      if epoch % 100 == 0:
+        print("Epoch: [%2d] Traindata epoch: [%4d] time: %4.4f, loss: %.8f"
+              % (epoch, self.reader.data_epochs[0], time.time() - start_time, total_loss))
+        print("cluster post")
+        print(cluster_posterior_dist)
 
-      # if epoch % 2 == 0:
-      #   writer.add_summary(summary_str, epoch)
+        print("expected deocign losses")
+        print(decoding_losses_average)
 
-      # if epoch != 0 and epoch % 500 == 0:
-      #   self.save(self.checkpoint_dir, self.global_step)
+        print("entropy loss")
+        print(entropy_loss)
+
+        print("total loss")
+        print(total_loss)
+
+        print("Each cluster expected loss")
+        print(decoding_losses_each_cluster)
+
+      if epoch % 2 == 0:
+        writer.add_summary(summary_str, epoch)
+
+      if epoch != 0 and epoch % 500 == 0:
+        self.save(self.checkpoint_dir, self.global_step)
 
   # def inference_graph(self, cluster_num):
   #   cluster_embedding = tf.nn.embedding_lookup(self.cluster_embeddings,

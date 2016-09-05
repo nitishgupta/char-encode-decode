@@ -14,6 +14,13 @@ class Model(object):
         model_dir += "/%s=%s" % (attr, getattr(self, attr))
     return model_dir
 
+  def get_log_dir(self, root_log_dir):
+    model_dir = self.get_model_dir()
+    log_dir = os.path.join(root_log_dir, model_dir)
+    if not os.path.exists(log_dir):
+      os.makedirs(log_dir)
+    return log_dir
+
   def save(self, checkpoint_dir, global_step=None):
     self.saver = tf.train.Saver()
 

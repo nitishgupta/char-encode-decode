@@ -19,14 +19,14 @@ flags.DEFINE_string("checkpoint_dir", "checkpoint", "Directory name to save the 
 flags.DEFINE_boolean("inference", False, "False for training, True for testing [False]")
 flags.DEFINE_integer("batch_size", 3, "Batch Size for training and testing")
 flags.DEFINE_integer("char_embedding_dim", 5, "Character Embedding Size")
-flags.DEFINE_integer("num_clusters", 3, "Number of clusters to induce")
+flags.DEFINE_integer("num_clusters", 2, "Number of clusters to induce")
 flags.DEFINE_integer("cluster_embed_dim", 5, "Cluster Embedding Size")
 flags.DEFINE_integer("encoder_num_layers", 2, "Num of Layers in encoder network")
-flags.DEFINE_integer("encoder_lstm_size", 4, "Size of encoder lstm layers")
+flags.DEFINE_integer("encoder_lstm_size", 5, "Size of encoder lstm layers")
 flags.DEFINE_integer("decoder_num_layers", 2, "Num of Layers in decoder network")
-flags.DEFINE_integer("decoder_lstm_size", 4, "Size of decoder lstm layers")
+flags.DEFINE_integer("decoder_lstm_size", 5, "Size of decoder lstm layers")
 flags.DEFINE_integer("ff_num_layers", 2, "Num of Layers in ff network")
-flags.DEFINE_integer("ff_hidden_layer_size", 4, "Size of ff hidden layers")
+flags.DEFINE_integer("ff_hidden_layer_size", 5, "Size of ff hidden layers")
 FLAGS = flags.FLAGS
 
 MODELS = {

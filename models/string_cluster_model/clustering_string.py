@@ -6,26 +6,24 @@ from models.base import Model
 
 
 
-class Clustering_VAE(Model):
+class Clustering_String(Model):
   """Unsupervised Clustering using Discrete-State VAE"""
 
-  def __init__(self, sess, reader, dataset, num_clusters, num_layers,
+  def __init__(self, sess, reader, dataset, num_clusters, num_encoder_layers,
                num_steps, h_dim, embed_dim, learning_rate, checkpoint_dir):
     self.sess = sess
-    self.reader = reader
-    self.dataset = dataset
+    self.reader = reader  # Reader class
+    self.dataset = dataset  # Directory name housing the dataset
 
-    self.num_clusters = num_clusters
-    self.num_layers = num_layers
+    self.num_clusters = num_clusters  # Num of clusters to induce in the set
+    self.num_layers = num_layers  # Num of layers in the encoder and decoder network
 
-    # Size of hidden layers
+    # Size of hidden layers in the encoder and decoder networks. This will also
+    # be the dimensionality in which each string is represented when encoding
     self.h_dim = h_dim
-    # Dimensionality in which cluster ids are represented
-    self.embed_dim = embed_dim
+    self.embed_dim = embed_dim  # Dimensionality in which cluster ids are represented
 
-    self.data_dimensions = reader.data_dimensions
-
-    self.max_steps = num_steps
+    self.max_steps = num_steps  # Max num of steps to run the training till
     self.batch_size = reader.batch_size
 
     with tf.variable_scope("encoder_decoder") as scope:
@@ -35,22 +33,28 @@ class Clustering_VAE(Model):
     self.checkpoint_dir = checkpoint_dir
 
 
-    # self._attrs=["batch_size", "embed_dim", "h_dim", "learning_rate"]
-    self._attrs=["data_dimensions", "embed_dim", "h_dim", "num_layers"]
+    self._attrs=["num_clusters", "embed_dim", "h_dim", "num_layers"]
 
-    # raise Exception(" [!] Working in progress")
     self.build_model(batch_size=self.batch_size)
 
   def build_model(self, batch_size):
     with tf.variable_scope("encoder_decoder") as scope:
-      self.x_input = tf.placeholder(tf.float32,
-                      [batch_size, self.data_dimensions],
-                      name="x_input")
+      self.enc_in_text = tf.placeholder(tf.int32,
+                                        [batch_size, None],
+                                        name="original_text")
+      self.dec_input = tf.placeholder(tf.int32,
+                                      [batch_size, None],
+                                      name="decoder_input_sequence")
+      # Lengths of both encoder input and decoder input text are same
+      self.text_lengths = tf.placeholder(tf.int32,
+                                        [batch_size],
+                                        name="text_lengths")
 
       self.cluster_embeddings = tf.get_variable(
-        name="cluster_embed", shape=[self.num_clusters, self.embed_dim],
-        initializer=tf.random_normal_initializer(mean=0.0,
-                                                 stddev=1.0/(self.num_clusters+self.embed_dim)))
+        name="cluster_embeddings", shape=[self.num_clusters, self.embed_dim],
+        initializer=tf.random_normal_initializer(
+          mean=0.0, stddev=1/(self.num_clusters+self.embed_dim))
+      )
 
     self.build_encoder_network()
     self.build_decoder_network()

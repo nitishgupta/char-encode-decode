@@ -13,21 +13,26 @@ def load(fname):
     return pickle.load(f)
 
 
-class CharBatchLoader(object):
-  '''For data in 'text_in \t text_out' format.
+class StringClusteringReader(object):
+  '''For data in 'text \t true_entity_id' format.
   Batch contains :
-    en_text_batch: char2idx vector ending with <eos>
+    en_text_batch: char2idx vector of text_in ending with <eos>
     en_lengths: vector of original string lengths before padding.
     dec_in_text_batch: char2idx vector starting with <go> and ending at last char
     dec_out_text_batch: char2idx vector starting with first char and ending with <eos>
     dec_lengths: vector of original string lengths before padding.
   '''
   def __init__(self, data_dir, dataset_name, batch_size):
+    ''' Makes char-vocab and has batch generation functions
+
+      data_dir : Directory in which all data is stored
+      dataset_name : Directory containing train.txt, valid.txt and test.txt
+    '''
     self.unk_char = '<unk_char>'
     self.unk_word = '<unk_word>'
     self.go = '<go>'
     self.padding = '<padding>'
-    self.char_eos = '<eos>'
+    self.eos_char = '<eos>'
     self.space = ' '
     self.train_fname = os.path.join(data_dir, dataset_name, 'train.txt')
     self.valid_fname = os.path.join(data_dir, dataset_name, 'valid.txt')
@@ -36,7 +41,7 @@ class CharBatchLoader(object):
 
 
     self.batch_size = batch_size
-    print("###################    BATCH SIZE #####   ", self.batch_size)
+    print("#####    BATCH SIZE #####   ", self.batch_size)
 
     self.vocab_fname = os.path.join(data_dir, dataset_name, 'vocab.pkl')
 
@@ -45,12 +50,10 @@ class CharBatchLoader(object):
       self.make_vocab(self.input_fnames, self.vocab_fname)
 
     print("Loading vocab...")
-    self.word2idx, self.idx2word, self.char2idx, self.idx2char = load(self.vocab_fname)
-    self.word_vocab_size = len(self.idx2word)
+    self.char2idx, self.idx2char = load(self.vocab_fname)
     self.char_vocab_size = len(self.idx2char)
-    print("Word vocab size: %d, Char vocab size: %d" % (self.word_vocab_size, self.char_vocab_size))
+    print("Char vocab size: %d" % (self.char_vocab_size))
 
-    print(self.word2idx)
     print(self.char2idx)
 
     print("Creating train, valid and test data file read objects")
@@ -74,15 +77,15 @@ class CharBatchLoader(object):
 
   def _read_line(self, data_idx):
     line = self.dataf[data_idx].readline()
-    # End of file reached, refresh train file
+    # End of file reached, refresh file
     if line == '':
-      self.data_epochs[data_idx] += 1
       self.dataf[data_idx].close()
       self.dataf[data_idx] = open(self.input_fnames[data_idx])
+      self.data_epochs[data_idx] += 1
       line = self.dataf[data_idx].readline()
     return line
 
-  def _get_text_2_charidx(self, words, encoder_text):
+  def _get_text_2_charidx(self, text, encoder_text):
     '''Converts text (as list of words) into char ids
     A char id for space is added after each word in the words list.
     Encoder text is appended with a <eos> character
@@ -96,15 +99,13 @@ class CharBatchLoader(object):
     if not encoder_text:
       char_idx.append(self.char2idx[self.go])
 
-    for i, word in enumerate(words):
-      if i != 0:
-        char_idx.append(self.char2idx[' '])
-      for char in word:
-        if char not in self.char2idx:
-          char_idx.append(self.char2idx['<unk_char>'])
-        else:
+    for char in text:
+      if char not in self.char2idx:
+          char_idx.append(self.char2idx[self.unk_char])
+      else:
           char_idx.append(self.char2idx[char])
-    char_idx.append(self.char2idx['<eos>'])
+    char_idx.append(self.char2idx[self.eos_char])
+
     return char_idx
 
   def next_inference_text(self):
@@ -117,30 +118,33 @@ class CharBatchLoader(object):
 
   def _next_batch(self, data_idx):
     '''Gets the next batch of training/testing/val data
+       The original text is char broken and appended with <eos>.
+       This will be used for encoding as well as output for decoder
 
+       The decoder input text is original text prepended with <go>
+       (does not have <eos> at the end)
+
+       The lengths of both text are same. (One has <eos> the other <go>)
     Args:
       data_idx: Indexes the dataset partition. 0: train, 1: valid, 2: test
     '''
-    en_text_batch, dec_in_text_batch, dec_out_text_batch = [], [], []
+    orig_text_batch, dec_in_text_batch = [], []
 
-    while len(en_text_batch) < self.batch_size:
+    while len(orig_text_batch) < self.batch_size:
       line = self._read_line(data_idx).strip()
 
-      assert len(line.split("\t")) == 2
-      [in_text, out_text] = line.split("\t")
-      in_text, out_text = in_text.strip(), out_text.strip()
-      in_words, out_words = in_text.split(), out_text.split()
+      # Split at "\t" to facilitate more information
+      text = line.split("\t")[0].strip()
 
-      en_char_idx = self._get_text_2_charidx(in_words, True)
-      dec_char_idx = self._get_text_2_charidx(out_words, False)
-      dec_in_char_idx = dec_char_idx[:-1]
-      dec_out_char_idx = dec_char_idx[1:]
+      # text_char_idx : has both <go> and <eos>
+      text_char_idx = self._get_text_2_charidx(text, False)
+      orig_text_char_idx = text_char_idx[1:]
+      dec_in_char_idx = text_char_idx[:-1]
 
-      en_text_batch.append(en_char_idx)
+      orig_text_batch.append(orig_text_char_idx)
       dec_in_text_batch.append(dec_in_char_idx)
-      dec_out_text_batch.append(dec_out_char_idx)
 
-    return en_text_batch, dec_in_text_batch, dec_out_text_batch
+    return orig_text_batch, dec_in_text_batch
 
   def next_padded_batch(self, data_idx):
     '''Returns batch of padded in_text and corresponding out text indexed
@@ -148,61 +152,47 @@ class CharBatchLoader(object):
 
     The padded length of in_text_batch and out_text_batch can be different.
     '''
-    en_text_batch, dec_in_text_batch, dec_out_text_batch = self._next_batch(data_idx)
-    en_lengths = [len(i) for i in en_text_batch]
-    # Decoder lengths for both in and out text should be (and is) same
-    dec_lengths = [len(i) for i in dec_in_text_batch]
+    (orig_text_batch, dec_in_text_batch) = self._next_batch(data_idx)
+    # The lengths for both orig_text_batch and dec_in_text_batch are same
+    text_lengths = [len(i) for i in  orig_text_batch]
+    text_max_length = max(text_lengths)
 
-    en_max_length, dec_max_length = max(en_lengths), max(dec_lengths)
-    for i in range(0, len(en_text_batch)):
-      en_text_batch[i].extend([0]*(en_max_length - en_lengths[i]))
-      dec_in_text_batch[i].extend([0]*(dec_max_length - dec_lengths[i]))
-      dec_out_text_batch[i].extend([0]*(dec_max_length - dec_lengths[i]))
+    for i in range(0, len(orig_text_batch)):
+      orig_text_batch[i].extend([0]*(text_max_length - text_lengths[i]))
+      dec_in_text_batch[i].extend([0]*(text_max_length - text_lengths[i]))
 
-    return en_text_batch, en_lengths, dec_in_text_batch, dec_out_text_batch, dec_lengths
+    return (orig_text_batch, dec_in_text_batch, text_lengths)
 
   def next_train_batch(self):
-    return self.next_padded_batch(0)
+    return self.next_padded_batch(data_idx=0)
 
   def make_vocab(self, input_files, vocab_fname):
-    word2idx = {self.unk_word: 0, self.padding: 1}
-    idx2word = [self.unk_word, self.padding]
-    char2idx = {self.space: 0, self.go: 1, self.char_eos: 2, self.unk_char: 3,
-                self.padding: 4}
-    idx2char = [self.space, self.go, self.char_eos, self.unk_char, self.padding]
+    char2idx = {}
+    idx2char = [self.space, self.go, self.eos_char, self.unk_char, self.padding]
+    for i, key in enumerate(idx2char):
+      char2idx[key] = i
     # Only reading the training data for creating vocab
     f = open(input_files[0])
     for line in f:
-      assert len(line.split("\t")) == 2
-      [in_text, out_text] = line.split("\t")
-      [in_text, out_text] = [in_text.strip(), out_text.strip()]
+      # Splitting at \t to facilitate extra information later. Eg. entity ids
+      text = line.split("\t")[0]
 
-      for text in [in_text, out_text]:
-        for word in text.split():
-          if word not in word2idx:
-            idx2word.append(word)
-            word2idx[word] = len(idx2word) - 1
+      for char in text.strip():
+        if char not in char2idx:
+          idx2char.append(char)
+          char2idx[char] = len(idx2char) - 1
 
-          for char in word:
-            if char not in char2idx:
-              idx2char.append(char)
-              char2idx[char] = len(idx2char) - 1
-
-    print("After first pass of data, size of word vocab: %d" % len(idx2word))
     print("After first pass of data, size of char vocab: %d" % len(idx2char))
 
-    save(vocab_fname, [word2idx, idx2word, char2idx, idx2char])
+    save(vocab_fname, [char2idx, idx2char])
 
 if __name__ == '__main__':
-  b = CharBatchLoader(data_dir="data", dataset_name="char", batch_size=3)
+  b = StringClusteringReader(data_dir="data",
+                             dataset_name="string_clustering",
+                             batch_size=3)
   for i in range(0, 5):
-    (en_text_batch, en_lengths, dec_in_text_batch,
-     dec_out_text_batch, dec_lengths) = b.next_padded_batch(0)
-    print("it: ", en_text_batch)
-    print("il: ", en_lengths)
+    (text_batch, dec_in_text_batch, lengths) = b.next_padded_batch(0)
+    print("it: ", text_batch)
     print("dit: ", dec_in_text_batch)
-    print("dot: ", dec_out_text_batch)
-    print("ol: ", dec_lengths)
+    print("ol: ", lengths)
     print("\n")
-    #print("s: ", lengths)
-

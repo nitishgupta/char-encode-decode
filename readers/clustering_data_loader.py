@@ -27,7 +27,7 @@ class ClusteringDataLoader(object):
     print("###################    BATCH SIZE #####   ", self.batch_size)
 
     self.data_dimensions = self.infer_data_dimensions()
-      
+
     print("Creating data file read objects")
     self.dataf = [open(fname) for fname in self.input_fnames]
     self.data_epochs = [0 for fname in self.input_fnames]

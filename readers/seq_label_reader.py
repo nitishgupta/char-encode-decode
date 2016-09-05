@@ -13,7 +13,7 @@ def load(fname):
 		return pickle.load(f)
 
 
-class BatchLoader(object):
+class SeqLabelBatchLoader(object):
 	def __init__(self, data_dir, dataset_name, batch_size):
 		self.train_fname = os.path.join(data_dir, dataset_name, 'train.txt')
 		self.valid_fname = os.path.join(data_dir, dataset_name, 'valid.txt')
@@ -41,7 +41,7 @@ class BatchLoader(object):
 		for f in self.dataf:
 			f.close()
 
-	def _read_line(self, data_idx): 
+	def _read_line(self, data_idx):
 		line = self.dataf[data_idx].readline()
 		# End of file reached, refresh train file
 		if line == '':
@@ -64,18 +64,18 @@ class BatchLoader(object):
 			words_idx = []
 			labels_idx = []
 			for word in words:
-				if not self.word2idx.has_key(word):
+				if word not in self.word2idx:
 					words_idx.append(0)
 				else:
 					words_idx.append(self.word2idx[word])
 
 			for label in labels:
-				if not self.label2idx.has_key(label):
+				if label not in self.label2idx:
 					labels_idx.append(0)
 				else:
 					labels_idx.append(self.label2idx[label])
 
-		
+
 			text_batch.append(words_idx)
 			labels_batch.append(labels_idx)
 		return text_batch, labels_batch
@@ -87,7 +87,7 @@ class BatchLoader(object):
 		for i, length in enumerate(lengths):
 			text_batch[i].extend([0]*(max_length - length))
 			labels_batch[i].extend([0]*(max_length - length))
-		
+
 		return text_batch, labels_batch, lengths
 
 	def next_train_batch(self):

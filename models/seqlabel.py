@@ -9,7 +9,7 @@ class SEQLABEL(Model):
 
   def __init__(self, sess, batch_loader, dataset="ner",
                num_layers=1, num_steps=3, embed_dim=100,
-               h_dim=50, learning_rate=0.01, 
+               h_dim=50, learning_rate=0.01,
                checkpoint_dir="checkpoint"):
     """Initialize Neural Varational Document Model.
 
@@ -44,16 +44,16 @@ class SEQLABEL(Model):
     self.q = tf.placeholder(tf.int32, [batch_size, None], name="input_sequence")
     self.a = tf.placeholder(tf.int32, [batch_size, None], name="label_sequence")
     self.lengths = tf.placeholder(tf.int32, [batch_size], name="sequence_lengths")
-    
+
     max_length = tf.shape(self.q)[1]
-    
+
     self.build_network()
 
     # Both - [batch_size * max_length]
     labels = tf.reshape(self.a, [-1])
     mask = self.get_mask()
 
-    self.losses = tf.nn.seq2seq.sequence_loss_by_example(logits=[self.proj], targets=[labels], 
+    self.losses = tf.nn.seq2seq.sequence_loss_by_example(logits=[self.proj], targets=[labels],
       weights=[mask], average_across_timesteps=False)
 
     self.losses = tf.reshape(self.losses, [batch_size, max_length])
@@ -72,7 +72,7 @@ class SEQLABEL(Model):
       cell = tf.nn.rnn_cell.BasicLSTMCell(self.h_dim, state_is_tuple=True)
       embedded_sequences = tf.nn.embedding_lookup(word_embeddings, self.q)
       # [batch_size, max_time, output_size]
-      outputs, states = tf.nn.dynamic_rnn(cell=cell, inputs=embedded_sequences, 
+      outputs, states = tf.nn.dynamic_rnn(cell=cell, inputs=embedded_sequences,
         sequence_length=self.lengths, dtype=tf.float32)
       outputs = tf.reshape(outputs, [-1, cell.output_size])
 
@@ -111,7 +111,7 @@ class SEQLABEL(Model):
       # for idx, text_batch, labels_batch, lengths in enumerate(self.reader.next_train_batch()):
       text_batch, labels_batch, lengths = self.reader.next_train_batch()
       _, loss, losses_per_seq, summary_str = self.sess.run(
-          [self.optim, self.loss, self.losses_per_seq, merged_sum], feed_dict={self.q: text_batch, 
+          [self.optim, self.loss, self.losses_per_seq, merged_sum], feed_dict={self.q: text_batch,
           self.a: labels_batch, self.lengths: lengths})
       self.global_step.assign(epoch).eval()
       epoch_loss += loss

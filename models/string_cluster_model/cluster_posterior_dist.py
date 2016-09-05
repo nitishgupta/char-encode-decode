@@ -9,9 +9,9 @@ from models.base import Model
 class ClusterPosteriorDistribution(Model):
   """Unsupervised Clustering using Discrete-State VAE"""
 
-  def __init__(self, batch_size, num_layers, h_dim, input_batch,
-               data_dimensions, num_clusters):
-
+  def __init__(self, batch_size, num_layers, h_dim, data_dimensions,
+               num_clusters, input_batch):
+    self.data_dimensions = data_dimensions
     self.num_layers = num_layers  # Num of layers in the encoder and decoder network
     self.num_clusters = num_clusters
 
@@ -26,10 +26,11 @@ class ClusterPosteriorDistribution(Model):
         self.initial_weights = tf.get_variable(name="initial_weights",
                                        shape=[self.data_dimensions, self.num_clusters],
                                        initializer=tf.random_normal_initializer(
-                                        mean=0.0, stddev=2.0/(self.data_dimensions+self.num_clusters)))
+                                        mean=0.0,
+                                        stddev=2.0/(self.data_dimensions+self.num_clusters)))
         self.initial_bias = tf.get_variable(name="initial_bias",
-                                       shape=[self.num_clusters],
-                                       initializer=tf.constant_initializer())
+                                            shape=[self.num_clusters],
+                                            initializer=tf.constant_initializer())
       else:
         self.initial_weights = tf.get_variable(name="initial_weights",
                                        shape=[self.data_dimensions, self.h_dim],
@@ -60,7 +61,8 @@ class ClusterPosteriorDistribution(Model):
 
           self.internal_weight_matrices.append(w)
           self.internal_biases.append(b)
-      # Passing x_input through feed-forward network made above
+
+      # Passing input_batch through feed-forward network made above
       self.network_output = tf.matmul(input_batch, self.initial_weights) + self.initial_bias
       if self.num_layers > 1:
         output = self.network_output

@@ -65,7 +65,6 @@ class ENDEC(Model):
       self.encoder_network = tf.nn.rnn_cell.MultiRNNCell([encoder_cell] * self.num_layers, state_is_tuple=True)
 
       #[batch_size, decoder_max_length, embed_dim]
-
       self.embedded_encoder_sequences = tf.nn.embedding_lookup(self.char_embeddings, self.en_input)
 
       self.en_outputs, self.en_states = tf.nn.dynamic_rnn(cell=self.encoder_network,
@@ -84,7 +83,6 @@ class ENDEC(Model):
     with tf.variable_scope("decoder") as scope:
       decoder_cell = tf.nn.rnn_cell.BasicLSTMCell(self.h_dim, state_is_tuple=True)
       self.decoder_network = tf.nn.rnn_cell.MultiRNNCell([decoder_cell] * self.num_layers, state_is_tuple=True)
-
 
       # [batch_size, max_time, embedding_dim]
       self.embedded_decoder_input_sequences = tf.nn.embedding_lookup(self.char_embeddings, self.dec_input)
@@ -163,8 +161,6 @@ class ENDEC(Model):
     start = self.global_step.eval()
 
     print("Training epochs done: %d" % start)
-
-    print(self.dec_in_states)
 
     for epoch in range(start, self.num_steps):
       epoch_loss = 0.
@@ -277,7 +273,6 @@ class ENDEC(Model):
 
     return states_list
 
-
   def get_states_dict(self, states_name, states_evaluated):
     """
     given a 'states' variable from a tensorflow model,
@@ -290,8 +285,6 @@ class ENDEC(Model):
       states_dict[state_name] = states_evaluated[i]
 
     return states_dict
-
-
 
   def print_variable_names(self, config):
     self.load(config.checkpoint_dir)

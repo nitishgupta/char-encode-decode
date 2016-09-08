@@ -54,11 +54,11 @@ class String_Clustering_VAE(Model):
       self.build_placeholders()
 
       self.encoder_model = EncoderModel(num_layers=self.encoder_num_layers,
-                                   batch_size=self.batch_size,
-                                   h_dim=self.encoder_lstm_size,
-                                   input_batch=self.in_text,
-                                   input_lengths=self.text_lengths,
-                                   char_embeddings=self.char_embeddings)
+                                        batch_size=self.batch_size,
+                                        h_dim=self.encoder_lstm_size,
+                                        input_batch=self.in_text,
+                                        input_lengths=self.text_lengths,
+                                        char_embeddings=self.char_embeddings)
 
       self.posterior_model = ClusterPosteriorDistribution(
         batch_size=self.batch_size,
@@ -89,7 +89,6 @@ class String_Clustering_VAE(Model):
                        cluster_num=cluster_num
           )
         )
-
 
   def build_placeholders(self):
     self.in_text = tf.placeholder(tf.int32,
@@ -152,10 +151,12 @@ class String_Clustering_VAE(Model):
                    self.dec_input_batch: dec_in_text_batch,
                    self.text_lengths: text_lengths}
       fetches = [self.posterior_model.cluster_posterior_dist,
-                 self.loss_graph.decoding_losses_average,
+                 self.loss_graph.losses_per_cluster,
+                 self.loss_graph.expected_decoding_loss,
                  self.loss_graph.entropy_loss,
                  self.loss_graph.total_loss,
-                 self.loss_graph.decoding_losses_each_cluster]
+                 self.posterior_model.network_output,
+                 self.encoder_model.encoder_last_output]
       (fetches,
        _,
        summary_str) = self.sess.run([fetches,
@@ -166,34 +167,56 @@ class String_Clustering_VAE(Model):
       self.global_step.assign(epoch).eval()
 
       [cluster_posterior_dist,
-       decoding_losses_average,
+       losses_per_cluster,
+       expected_decoding_loss,
        entropy_loss,
        total_loss,
-       decoding_losses_each_cluster] = fetches
+       post_model_out,
+       encoder_last_output] = fetches
 
-      if epoch % 100 == 0:
-        print("Epoch: [%2d] Traindata epoch: [%4d] time: %4.4f, loss: %.8f"
-              % (epoch, self.reader.data_epochs[0], time.time() - start_time, total_loss))
+      if epoch % 10 == 0:
+        ### DEBUG
+        _, text = self.reader.charidx_to_text(orig_text_batch[0])
+        print("\nText : %s " % text)
+
+        print("Epoch: [%2d] Traindata epoch: [%4d] time: %4.2f, total loss: %.5f"
+              " Entropy Loss: [%.5f], Decoding Loss Average: [%.5f]"
+              % (epoch, self.reader.data_epochs[0],
+                 time.time() - start_time, total_loss, entropy_loss,
+                 expected_decoding_loss))
+
+        print("encoder_last_output")
+        print(encoder_last_output)
+
+        print("post model out")
+        print(post_model_out)
+
         print("cluster post")
         print(cluster_posterior_dist)
 
-        print("expected deocign losses")
-        print(decoding_losses_average)
+        print("Losses per cluster")
+        print(losses_per_cluster)
 
-        print("entropy loss")
-        print(entropy_loss)
 
-        print("total loss")
-        print(total_loss)
-
-        print("Each cluster expected loss")
-        print(decoding_losses_each_cluster)
 
       if epoch % 2 == 0:
         writer.add_summary(summary_str, epoch)
 
       if epoch != 0 and epoch % 500 == 0:
         self.save(self.checkpoint_dir, self.global_step)
+  def print_all_variables(self):
+    print("All Variables in the graph : ")
+    self.print_variables_in_collection(tf.all_variables())
+
+  def print_trainable_variables(self):
+    print("All Trainable variables in the graph : ")
+    self.print_variables_in_collection(tf.trainable_variables())
+
+  def print_variables_in_collection(self, list_vars):
+    print("Variables in list: ")
+    for var in list_vars:
+      print("  %s" % var.name)
+
 
   # def inference_graph(self, cluster_num):
   #   cluster_embedding = tf.nn.embedding_lookup(self.cluster_embeddings,

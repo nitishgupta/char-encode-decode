@@ -65,11 +65,18 @@ class ClusterPosteriorDistribution(Model):
       # Passing input_batch through feed-forward network made above
       self.network_output = tf.matmul(input_batch, self.initial_weights) + self.initial_bias
       if self.num_layers > 1:
+        # If network has more than 1 layer then activation after 1st layer
+        self.network_output = tf.nn.relu(self.network_output)
         output = self.network_output
         for layer in range(0, len(self.internal_weight_matrices)):
           output = tf.matmul(output,
                              self.internal_weight_matrices[layer]) + self.internal_biases[layer]
+          # Activation after each layer output apart from last layer
+          output = tf.nn.relu(output)
         self.network_output = tf.matmul(output, self.final_weights) + self.final_bias
+
+
+      self.network_output = tf.mul(self.network_output, 1000.0)
       # [batch_size, num_clusters]
       self.cluster_posterior_dist = tf.nn.softmax(logits=self.network_output,
                                                   name="cluster_posterior_distribution")

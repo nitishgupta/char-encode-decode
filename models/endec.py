@@ -176,12 +176,13 @@ class ENDEC(Model):
                    self.dec_lengths: dec_lengths}
 
       (_, loss, losses_per_seq, summary_str,
-       raw_scores) = self.sess.run([self.optim,
-                                    self.loss,
-                                    self.losses_per_seq,
-                                    merged_sum,
-                                    self.raw_scores],
-                                   feed_dict=feed_dict)
+       last_output, raw_scores) = self.sess.run([self.optim,
+                                                 self.loss,
+                                                 self.losses_per_seq,
+                                                 merged_sum,
+                                                 self.en_last_output,
+                                                 self.raw_scores],
+                                                feed_dict=feed_dict)
 
       self.global_step.assign(epoch).eval()
       # print([var.name for var in tf.all_variables()])
@@ -189,6 +190,8 @@ class ENDEC(Model):
       if epoch % 10 == 0:
         print("Epoch: [%2d] Traindata epoch: [%4d] time: %4.4f, loss: %.8f"
               % (epoch, self.reader.data_epochs[0], time.time() - start_time, loss))
+        print("Encoding last state")
+        print(last_output)
 
       if epoch % 2 == 0:
         writer.add_summary(summary_str, epoch)
@@ -197,9 +200,11 @@ class ENDEC(Model):
         self.save(self.checkpoint_dir, self.global_step)
         #debug
         char_ids = np.argmax(raw_scores, axis=2)
+        print("Decoded : ")
         for c_id in char_ids:
           t, tt = self.reader.charidx_to_text(c_id)
           print(tt)
+        print("Truth : ")
         for c_id in dec_out_text_batch:
           t, tt = self.reader.charidx_to_text(c_id)
           print(tt)

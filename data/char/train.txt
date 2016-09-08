@@ -1,9 +1,4 @@
-nitish gupta	nitish
-nitish gupta	nitish gupta
-nitish	nitish gupta
-sameer	sameer
-sameer singh	sameer
-sameer singh	Mr. Sameer
-sameer singh	singh
-sameer	sameer singh
-singh	sameer singh
+abcdefg	abcdefg
+hijklmno	hijklo
+pqrst	pqrst
+uvwxyz	uvwxyz

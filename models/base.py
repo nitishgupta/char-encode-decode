@@ -53,7 +53,7 @@ class Model(object):
     start_iter = self.step.eval()
 
   def load(self, checkpoint_dir, var_list=None, attrs=None):
-    saver = tf.train.Saver(var_list=var_list)
+    saver = tf.train.Saver(var_list=var_list, max_to_keep=5)
 
     print(" [*] Loading checkpoints...")
     model_dir = self.get_model_dir(attrs=attrs)

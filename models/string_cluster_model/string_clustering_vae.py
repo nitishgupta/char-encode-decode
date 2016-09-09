@@ -196,15 +196,38 @@ class String_Clustering_VAE(Model):
                                 learning_rate=self.learning_rate,
                                 scope_name=self.loss_graph_scope)
 
+    self.loss_graph_vars = self.scope_vars_list(
+      scope_name=self.loss_graph_scope,
+      var_list=tf.all_variables())
+
     start_time = time.time()
 
     merged_sum = tf.merge_all_summaries()
     log_dir = self.get_log_dir(root_log_dir="./logs/")
     writer = tf.train.SummaryWriter(log_dir, self.sess.graph)
 
-    # First initialize all variables then loads checkpoints
-    self.sess.run(tf.initialize_all_variables())
-    #self.load(self.checkpoint_dir)
+    # Initialize all variables()
+    self.sess.run(tf.initialize_variables(tf.all_variables()))
+
+    # (Try) Load cluster model
+    model_load_status = self.load(checkpoint_dir=self.checkpoint_dir,
+                                  var_list=self.cluster_model_trainable_vars,
+                                  attrs=self._attrs)
+
+
+    # Initialize loss graph variables
+    #self.sess.run(tf.initialize_variables(self.loss_graph_vars))
+
+    # If Cluster Model does not exist - Initialize
+    #if not model_load_status:
+      #self.sess.run(tf.initialize_variables(self.cluster_model_trainable_vars))
+
+    # On top of the cluster model, Load pretrained variables
+    # Insert check for this loading. / What if cluster model is more recent than
+    # the pre-trained kept.
+    pretrain_load_status = self.load(checkpoint_dir=self.checkpoint_dir,
+                                     var_list=self.pretraining_trainable_vars,
+                                     attrs=self._pretrain_attrs)
 
     start = self.global_step.eval()
 
@@ -275,7 +298,10 @@ class String_Clustering_VAE(Model):
         writer.add_summary(summary_str, epoch)
 
       if epoch != 0 and epoch % 200 == 0:
-        self.save(self.checkpoint_dir, self.global_step)
+        self.save(checkpoint_dir=self.checkpoint_dir,
+                  var_list=self.cluster_model_trainable_vars,
+                  attrs=self._attrs,
+                  global_step=self.global_step)
 
   def pretraining(self):
   # Make the loss graph
@@ -298,14 +324,15 @@ class String_Clustering_VAE(Model):
     log_dir = self.get_log_dir(root_log_dir="./logs/")
     writer = tf.train.SummaryWriter(log_dir, self.sess.graph)
 
-    # First initialize all variables then loads checkpoints
-    # Load variables that are needed from checkpoint.
-    # Initialize rest
+    # (Try) Load the pretraining model trainable variables
     load_status = self.load(checkpoint_dir=self.checkpoint_dir,
               var_list=self.pretraining_trainable_vars,
               attrs=self._pretrain_attrs)
 
+    # Initialize pretraining loss graph model variables
     self.sess.run(tf.initialize_variables(self.pretrain_loss_vars))
+
+    # If pre-training graph not found - Initialize trainable variables
     if not load_status:
       self.sess.run(tf.initialize_variables(self.pretraining_trainable_vars))
 
@@ -334,10 +361,11 @@ class String_Clustering_VAE(Model):
                                      merged_sum],
                                     feed_dict=feed_dict)
 
-      self.pretrain_global_step.assign(epoch).eval()
-
       [pretraining_loss,
        encoder_last_output] = fetches
+
+      self.pretrain_global_step.assign(epoch).eval()
+
 
       if epoch % 10 == 0:
         ### DEBUG
@@ -360,6 +388,7 @@ class String_Clustering_VAE(Model):
                   var_list=self.pretraining_trainable_vars,
                   attrs=self._pretrain_attrs,
                   global_step=self.pretrain_global_step)
+    #endfor
 
 
   def print_all_variables(self):

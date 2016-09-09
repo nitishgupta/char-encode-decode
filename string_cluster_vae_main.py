@@ -13,7 +13,8 @@ flags = tf.app.flags
 flags.DEFINE_float("learning_rate", 0.001, "Learning rate of adam optimizer [0.001]")
 flags.DEFINE_float("decay_rate", 0.96, "Decay rate of learning rate [0.96]")
 flags.DEFINE_float("decay_step", 10000, "# of decay step for learning rate decaying [10000]")
-flags.DEFINE_integer("max_steps", 4, "Maximum of iteration [450000]")
+flags.DEFINE_integer("max_steps", 201, "Maximum of iteration [450000]")
+flags.DEFINE_integer("pretraining_steps", 201, "Number of steps to run pretraining")
 flags.DEFINE_string("model", "string_clustering", "The name of model [nvdm, nasm]")
 flags.DEFINE_string("dataset", "string_clustering", "The name of dataset [ptb]")
 flags.DEFINE_string("checkpoint_dir", "checkpoint", "Directory name to save the checkpoints [checkpoints]")
@@ -29,7 +30,7 @@ flags.DEFINE_integer("decoder_lstm_size", 5, "Size of decoder lstm layers")
 flags.DEFINE_integer("ff_num_layers", 2, "Num of Layers in ff network")
 flags.DEFINE_integer("ff_hidden_layer_size", 5, "Size of ff hidden layers")
 flags.DEFINE_float("reg_constant", 0.005, "Regularization constant for posterior regularization [10000]")
-flags.DEFINE_integer("pretraining_steps", 1000, "Number of steps to run pretraining")
+
 
 FLAGS = flags.FLAGS
 
@@ -53,6 +54,7 @@ def main(_):
     m = MODELS[FLAGS.model]
     model = m(sess=sess, reader=reader, dataset=FLAGS.dataset,
               max_steps=FLAGS.max_steps,
+              pretrain_max_steps=201,
               char_embedding_dim=FLAGS.char_embedding_dim,
               num_clusters=FLAGS.num_clusters,
               cluster_embed_dim=FLAGS.cluster_embed_dim,

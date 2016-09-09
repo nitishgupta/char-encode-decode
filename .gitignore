@@ -88,3 +88,4 @@ Session.vim
 *~
 .DS_STORE
 .DS_Store
+models/string_cluster_model/trainable_variables

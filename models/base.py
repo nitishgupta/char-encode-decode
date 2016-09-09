@@ -22,7 +22,7 @@ class Model(object):
     return log_dir
 
   def save(self, checkpoint_dir, global_step=None):
-    self.saver = tf.train.Saver()
+    self.saver = tf.train.Saver(max_to_keep=5)
 
     print(" [*] Saving checkpoints...")
     model_name = type(self).__name__
@@ -59,3 +59,21 @@ class Model(object):
     else:
       print(" [!] Load failed...")
       return False
+
+  # def load(self, checkpoint_dir, list_of_variables):
+  #   self.saver = tf.train.Saver(var_list=list_of_variables,
+  #                               max_to_keep=5)
+
+  #   print(" [*] Loading checkpoints...")
+  #   model_dir = self.get_model_dir()
+  #   checkpoint_dir = os.path.join(checkpoint_dir, model_dir)
+
+  #   ckpt = tf.train.get_checkpoint_state(checkpoint_dir)
+  #   if ckpt and ckpt.model_checkpoint_path:
+  #     ckpt_name = os.path.basename(ckpt.model_checkpoint_path)
+  #     self.saver.restore(self.sess, os.path.join(checkpoint_dir, ckpt_name))
+  #     print(" [*] Load SUCCESS")
+  #     return True
+  #   else:
+  #     print(" [!] Load failed...")
+  #     return False

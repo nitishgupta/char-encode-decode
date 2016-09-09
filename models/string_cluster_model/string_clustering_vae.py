@@ -5,6 +5,7 @@ import numpy as np
 from models.base import Model
 from models.string_cluster_model.encoder_network import EncoderModel
 from models.string_cluster_model.decoder_network import DecoderModel
+from models.string_cluster_model.pretrain_decoder import PreTrainingDecoderModel
 from models.string_cluster_model.cluster_posterior_dist import ClusterPosteriorDistribution
 from models.string_cluster_model.loss_graph import LossGraph
 
@@ -13,7 +14,8 @@ from models.string_cluster_model.loss_graph import LossGraph
 class String_Clustering_VAE(Model):
   """Unsupervised Clustering using Discrete-State VAE"""
 
-  def __init__(self, sess, reader, dataset, max_steps, char_embedding_dim,
+  def __init__(self, sess, reader, dataset, max_steps, pretrain_max_steps,
+               char_embedding_dim,
                num_clusters, cluster_embed_dim,
                encoder_num_layers, encoder_lstm_size,
                decoder_num_layers, decoder_lstm_size,
@@ -24,6 +26,7 @@ class String_Clustering_VAE(Model):
     self.dataset = dataset  # Directory name housing the dataset
 
     self.max_steps = max_steps  # Max num of steps of training to run
+    self.pretrain_max_steps = pretrain_max_steps
     self.batch_size = reader.batch_size
 
     self.num_chars = len(self.reader.idx2char)  # Num. of chars in vocab
@@ -47,6 +50,8 @@ class String_Clustering_VAE(Model):
 
     with tf.variable_scope("string_clustering_vae") as scope:
       self.global_step = tf.Variable(0, name='global_step', trainable=False)
+      self.pretrain_global_step = tf.Variable(0, name='pretrain_global_step',
+                                              trainable=False)
 
       self.learning_rate = learning_rate
       self.checkpoint_dir = checkpoint_dir
@@ -60,6 +65,19 @@ class String_Clustering_VAE(Model):
                                         input_lengths=self.text_lengths,
                                         char_embeddings=self.char_embeddings)
 
+      ## Decoder Network from Pre-training.
+      # Keeping same number of layers and hidden units as encoder
+      self.pretraining_decoder = PreTrainingDecoderModel(
+        num_layers=self.encoder_num_layers,
+        batch_size=self.batch_size,
+        h_dim=self.encoder_lstm_size,
+        dec_input_batch=self.dec_input_batch,
+        dec_input_lengths=self.text_lengths,
+        num_char_vocab=self.num_chars,
+        char_embeddings=self.char_embeddings,
+        encoder_last_output=self.encoder_model.encoder_last_output)
+
+      # Posterior Distribution calculation from Encoder Last Output
       self.posterior_model = ClusterPosteriorDistribution(
         batch_size=self.batch_size,
         num_layers=self.ff_num_layers,
@@ -68,9 +86,7 @@ class String_Clustering_VAE(Model):
         num_clusters=self.num_clusters,
         input_batch=self.encoder_model.encoder_last_output)
 
-      sum1 = tf.reduce_sum(self.posterior_model.cluster_posterior_dist)
-      _ = tf.scalar_summary("sum1", sum1)
-
+      # List of decoder_graphs, one for each cluster
       self.decoder_models = []
       for cluster_num in range(0, self.num_clusters):
         if cluster_num > 0:
@@ -116,6 +132,8 @@ class String_Clustering_VAE(Model):
 
 
   def train(self, config):
+    self.pretraining()
+
     # Make the loss graph
     self.loss_graph = LossGraph(batch_size=self.batch_size,
                                 input_text=self.in_text,
@@ -125,6 +143,9 @@ class String_Clustering_VAE(Model):
                                 num_clusters=self.num_clusters,
                                 learning_rate=self.learning_rate)
 
+    self.print_all_variables()
+    self.print_trainable_variables()
+
     start_time = time.time()
 
     merged_sum = tf.merge_all_summaries()
@@ -133,7 +154,7 @@ class String_Clustering_VAE(Model):
 
     # First initialize all variables then loads checkpoints
     self.sess.run(tf.initialize_all_variables())
-    self.load(self.checkpoint_dir)
+    #self.load(self.checkpoint_dir)
 
     start = self.global_step.eval()
 
@@ -157,10 +178,11 @@ class String_Clustering_VAE(Model):
                  self.loss_graph.total_loss,
                  self.posterior_model.network_output,
                  self.encoder_model.encoder_last_output]
+
       (fetches,
        _,
        summary_str) = self.sess.run([fetches,
-                                     self.loss_graph.optim_op,
+                                     self.pretraining_decoder.optim_op,
                                      merged_sum],
                                     feed_dict=feed_dict)
 
@@ -202,8 +224,79 @@ class String_Clustering_VAE(Model):
       if epoch % 2 == 0:
         writer.add_summary(summary_str, epoch)
 
-      if epoch != 0 and epoch % 500 == 0:
+      if epoch != 0 and epoch % 200 == 0:
         self.save(self.checkpoint_dir, self.global_step)
+
+  def pretraining(self):
+  # Make the loss graph
+    self.pretraining_decoder.pretrain_loss_graph(input_text=self.in_text,
+                                                 text_lengths=self.text_lengths,
+                                                 learning_rate=self.learning_rate)
+
+    start_time = time.time()
+
+    merged_sum = tf.merge_all_summaries()
+    log_dir = self.get_log_dir(root_log_dir="./logs/")
+    writer = tf.train.SummaryWriter(log_dir, self.sess.graph)
+
+    # First initialize all variables then loads checkpoints
+    # Load variables that are needed from checkpoint.
+    # Initialize rest
+    self.sess.run(tf.initialize_all_variables())
+    self.load(self.checkpoint_dir)
+
+    self.print_all_variables()
+
+    start = self.pretrain_global_step.eval()
+
+    print("Pre-Training epochs done: %d" % start)
+
+    for epoch in range(start, self.pretrain_max_steps):
+      epoch_loss = 0.
+
+      # for idx, text_batch, labels_batch, lengths in enumerate(self.reader.next_train_batch()):
+      (orig_text_batch,
+       dec_in_text_batch,
+       text_lengths) = self.reader.next_train_batch()
+
+      feed_dict = {self.in_text: orig_text_batch,
+                   self.dec_input_batch: dec_in_text_batch,
+                   self.text_lengths: text_lengths}
+      fetch_tensors = [self.pretraining_decoder.loss,
+                       self.encoder_model.encoder_last_output]
+
+      (fetches,
+       _,
+       summary_str) = self.sess.run([fetch_tensors,
+                                     self.pretraining_decoder.optim_op,
+                                     merged_sum],
+                                    feed_dict=feed_dict)
+
+      self.pretrain_global_step.assign(epoch).eval()
+
+      [pretraining_loss,
+       encoder_last_output] = fetches
+
+      if epoch % 10 == 0:
+        ### DEBUG
+        _, text = self.reader.charidx_to_text(orig_text_batch[0])
+        print("\nText : %s " % text)
+
+        print("Epoch: [%2d] Traindata epoch: [%4d] time: %4.2f, "
+              "pretrain loss: %.5f"
+              % (epoch, self.reader.data_epochs[0],
+                 time.time() - start_time, pretraining_loss))
+
+        print("encoder_last_output")
+        print(encoder_last_output)
+
+      if epoch % 2 == 0:
+        writer.add_summary(summary_str, epoch)
+
+      if epoch != 0 and epoch % 200 == 0:
+        self.save(self.checkpoint_dir, global_step=0)
+
+
   def print_all_variables(self):
     print("All Variables in the graph : ")
     self.print_variables_in_collection(tf.all_variables())

@@ -11,7 +11,8 @@ class DecoderModel(Model):
 
   def __init__(self, num_layers, batch_size, h_dim, dec_input_batch,
                dec_input_lengths, num_char_vocab,
-               char_embeddings, cluster_embeddings, cluster_num):
+               char_embeddings, cluster_embeddings, cluster_num,
+               scope_name):
 
     self.num_layers = num_layers  # Num of layers in the encoder and decoder network
 
@@ -22,7 +23,7 @@ class DecoderModel(Model):
     self.cluster_embeddings = cluster_embeddings
     self.batch_size = batch_size
 
-    with tf.variable_scope("decoder_network") as scope:
+    with tf.variable_scope(scope_name) as scope:
       cluster_embedding = tf.nn.embedding_lookup(self.cluster_embeddings,
                                                  cluster_num,
                                                  name="get_cluster_embedding")

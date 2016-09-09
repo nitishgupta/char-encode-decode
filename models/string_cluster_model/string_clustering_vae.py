@@ -42,6 +42,14 @@ class String_Clustering_VAE(Model):
     self.ff_num_layers = ff_num_layers
     self.ff_hidden_layer_size = ff_hidden_layer_size
 
+    self.embeddings_scope = "embeddings"
+    self.char_embeddings_var_name = "char_embeddings"
+    self.cluster_embeddings_var_name = "cluster_embeddings"
+    self.encoder_net_scope = "encoder_network"
+    self.pretraining_decoder_net_scope = "pretraining_decoder_network"
+    self.posterior_net_scope = "posterior_feed_forward"
+    self.decoder_net_scope = "decoder_network"
+
     self._attrs=["char_embedding_size", "num_clusters", "cluster_embed_size",
                  "encoder_num_layers", "encoder_lstm_size",
                  "decoder_num_layers", "decoder_lstm_size",
@@ -63,7 +71,8 @@ class String_Clustering_VAE(Model):
                                         h_dim=self.encoder_lstm_size,
                                         input_batch=self.in_text,
                                         input_lengths=self.text_lengths,
-                                        char_embeddings=self.char_embeddings)
+                                        char_embeddings=self.char_embeddings,
+                                        scope_name=self.encoder_net_scope)
 
       ## Decoder Network from Pre-training.
       # Keeping same number of layers and hidden units as encoder
@@ -75,7 +84,25 @@ class String_Clustering_VAE(Model):
         dec_input_lengths=self.text_lengths,
         num_char_vocab=self.num_chars,
         char_embeddings=self.char_embeddings,
-        encoder_last_output=self.encoder_model.encoder_last_output)
+        encoder_last_output=self.encoder_model.encoder_last_output,
+        scope_name=self.pretraining_decoder_net_scope)
+
+      self.pretraining_trainable_vars = []
+      self.pretraining_trainable_vars.extend(
+        self.scope_vars_list(scope_name=self.embeddings_scope,
+                             var_list=tf.trainable_variables())
+      )
+
+      self.pretraining_trainable_vars.extend(
+        self.scope_vars_list(scope_name=self.encoder_net_scope,
+                             var_list=tf.trainable_variables())
+      )
+      self.pretraining_trainable_vars.extend(
+        self.scope_vars_list(scope_name=self.pretraining_decoder_net_scope,
+                             var_list=tf.trainable_variables())
+      )
+
+      self.print_variables_in_collection(self.pretraining_trainable_vars)
 
       # Posterior Distribution calculation from Encoder Last Output
       self.posterior_model = ClusterPosteriorDistribution(
@@ -84,7 +111,8 @@ class String_Clustering_VAE(Model):
         h_dim=self.ff_hidden_layer_size,
         data_dimensions=self.encoder_lstm_size,
         num_clusters=self.num_clusters,
-        input_batch=self.encoder_model.encoder_last_output)
+        input_batch=self.encoder_model.encoder_last_output,
+        scope_name=self.posterior_net_scope)
 
       # List of decoder_graphs, one for each cluster
       self.decoder_models = []
@@ -102,9 +130,11 @@ class String_Clustering_VAE(Model):
                        num_char_vocab=self.num_chars,
                        char_embeddings=self.char_embeddings,
                        cluster_embeddings=self.cluster_embeddings,
-                       cluster_num=cluster_num
-          )
+                       cluster_num=cluster_num,
+                       scope_name=self.decoder_net_scope)
         )
+
+
 
   def build_placeholders(self):
     self.in_text = tf.placeholder(tf.int32,
@@ -118,17 +148,18 @@ class String_Clustering_VAE(Model):
                                       [self.batch_size],
                                       name="text_lengths")
 
-    self.char_embeddings = tf.get_variable(
-      name="char_embeddings",
-      shape=[self.num_chars, self.char_embedding_dim],
-      initializer=tf.random_normal_initializer(
-        mean=0.0, stddev=1.0/(self.num_chars+self.char_embedding_dim)))
+    with tf.variable_scope(self.embeddings_scope) as scope:
+      self.char_embeddings = tf.get_variable(
+        name=self.char_embeddings_var_name,
+        shape=[self.num_chars, self.char_embedding_dim],
+        initializer=tf.random_normal_initializer(
+          mean=0.0, stddev=1.0/(self.num_chars+self.char_embedding_dim)))
 
-    self.cluster_embeddings = tf.get_variable(
-      name="cluster_embeddings",
-      shape=[self.num_clusters, self.cluster_embed_dim],
-      initializer=tf.random_normal_initializer(
-        mean=0.0, stddev=1.0/(self.num_clusters+self.cluster_embed_dim)))
+      self.cluster_embeddings = tf.get_variable(
+        name=self.cluster_embeddings_var_name,
+        shape=[self.num_clusters, self.cluster_embed_dim],
+        initializer=tf.random_normal_initializer(
+          mean=0.0, stddev=1.0/(self.num_clusters+self.cluster_embed_dim)))
 
 
   def train(self, config):
@@ -244,8 +275,6 @@ class String_Clustering_VAE(Model):
     # Initialize rest
     self.sess.run(tf.initialize_all_variables())
     self.load(self.checkpoint_dir)
-
-    self.print_all_variables()
 
     start = self.pretrain_global_step.eval()
 

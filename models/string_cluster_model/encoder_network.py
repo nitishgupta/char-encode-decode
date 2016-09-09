@@ -10,7 +10,7 @@ class EncoderModel(Model):
   """Unsupervised Clustering using Discrete-State VAE"""
 
   def __init__(self, num_layers, batch_size, h_dim, input_batch, input_lengths,
-               char_embeddings):
+               char_embeddings, scope_name):
 
     self.num_layers = num_layers  # Num of layers in the encoder and decoder network
 
@@ -20,7 +20,7 @@ class EncoderModel(Model):
 
     self.batch_size = batch_size
 
-    with tf.variable_scope("encoder_network") as scope:
+    with tf.variable_scope(scope_name) as scope:
       encoder_cell = tf.nn.rnn_cell.BasicLSTMCell(h_dim, state_is_tuple=True)
       self.encoder_network = tf.nn.rnn_cell.MultiRNNCell(
         [encoder_cell] * self.num_layers, state_is_tuple=True)

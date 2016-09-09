@@ -10,7 +10,7 @@ class ClusterPosteriorDistribution(Model):
   """Unsupervised Clustering using Discrete-State VAE"""
 
   def __init__(self, batch_size, num_layers, h_dim, data_dimensions,
-               num_clusters, input_batch):
+               num_clusters, input_batch, scope_name):
     self.data_dimensions = data_dimensions
     self.num_layers = num_layers  # Num of layers in the encoder and decoder network
     self.num_clusters = num_clusters

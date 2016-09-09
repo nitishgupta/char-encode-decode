@@ -60,6 +60,25 @@ class Model(object):
       print(" [!] Load failed...")
       return False
 
+  def collect_scope(self, scope_name, graph=None, var_type=tf.GraphKeys.VARIABLES):
+    if graph == None:
+        graph = tf.get_default_graph()
+
+    var_list = graph.get_collection(var_type, scope=scope_name)
+
+    assert_str = "No variable exists with name_scope '{}'".format(scope_name)
+    assert len(var_list) != 0, assert_str
+
+    return var_list
+
+  def scope_vars_list(self, scope_name, var_list):
+    scope_var_list = []
+    for var in var_list:
+      if scope_name in var.name:
+        scope_var_list.append(var)
+    return scope_var_list
+
+
   # def load(self, checkpoint_dir, list_of_variables):
   #   self.saver = tf.train.Saver(var_list=list_of_variables,
   #                               max_to_keep=5)

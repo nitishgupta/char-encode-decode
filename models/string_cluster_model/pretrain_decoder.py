@@ -72,10 +72,11 @@ class PreTrainingDecoderModel(Model):
                                       perm=[1,0,2],
                                       name="concat_cluster_emb_decoder_in")
 
-  def pretrain_loss_graph(self, input_text, text_lengths, learning_rate):
+  def pretrain_loss_graph(self, input_text, text_lengths, learning_rate,
+                          scope_name):
     self.learning_rate = learning_rate
 
-    with   tf.variable_scope("pretrain_loss_graph") as scope:
+    with   tf.variable_scope(scope_name) as scope:
       # [batch_size * max_length]
       self.true_char_ids = tf.reshape(input_text,
                                       [-1],

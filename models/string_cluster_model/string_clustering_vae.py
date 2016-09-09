@@ -1,6 +1,7 @@
 import time
 import tensorflow as tf
 import numpy as np
+import sys
 
 from models.base import Model
 from models.string_cluster_model.encoder_network import EncoderModel
@@ -49,12 +50,17 @@ class String_Clustering_VAE(Model):
     self.pretraining_decoder_net_scope = "pretraining_decoder_network"
     self.posterior_net_scope = "posterior_feed_forward"
     self.decoder_net_scope = "decoder_network"
+    self.pretrain_loss_graph_scope = "pretrain_loss_graph"
+    self.loss_graph_scope = "string_clustering_vae_loss_graph"
 
     self._attrs=["char_embedding_size", "num_clusters", "cluster_embed_size",
                  "encoder_num_layers", "encoder_lstm_size",
                  "decoder_num_layers", "decoder_lstm_size",
                  "ff_number_layers", "ff_hidden_layer_size"
                  "num_chars"]
+
+    self._pretrain_attrs=["char_embedding_size", "encoder_num_layers",
+                          "encoder_lstm_size", "num_chars"]
 
     with tf.variable_scope("string_clustering_vae") as scope:
       self.global_step = tf.Variable(0, name='global_step', trainable=False)
@@ -87,23 +93,6 @@ class String_Clustering_VAE(Model):
         encoder_last_output=self.encoder_model.encoder_last_output,
         scope_name=self.pretraining_decoder_net_scope)
 
-      self.pretraining_trainable_vars = []
-      self.pretraining_trainable_vars.extend(
-        self.scope_vars_list(scope_name=self.embeddings_scope,
-                             var_list=tf.trainable_variables())
-      )
-
-      self.pretraining_trainable_vars.extend(
-        self.scope_vars_list(scope_name=self.encoder_net_scope,
-                             var_list=tf.trainable_variables())
-      )
-      self.pretraining_trainable_vars.extend(
-        self.scope_vars_list(scope_name=self.pretraining_decoder_net_scope,
-                             var_list=tf.trainable_variables())
-      )
-
-      self.print_variables_in_collection(self.pretraining_trainable_vars)
-
       # Posterior Distribution calculation from Encoder Last Output
       self.posterior_model = ClusterPosteriorDistribution(
         batch_size=self.batch_size,
@@ -133,6 +122,38 @@ class String_Clustering_VAE(Model):
                        cluster_num=cluster_num,
                        scope_name=self.decoder_net_scope)
         )
+      #endfor clusters
+
+    self.encoder_train_vars = self.scope_vars_list(
+      scope_name=self.encoder_net_scope,
+      var_list=tf.trainable_variables())
+    self.pretraining_decoder_train_vars = self.scope_vars_list(
+      scope_name=self.pretraining_decoder_net_scope,
+      var_list=tf.trainable_variables())
+    self.posterior_train_vars = self.scope_vars_list(
+      scope_name=self.posterior_net_scope,
+      var_list=tf.trainable_variables())
+    self.decoder_train_vars = self.scope_vars_list(
+      scope_name=self.decoder_net_scope,
+      var_list=tf.trainable_variables())
+
+    self.pretraining_trainable_vars = [self.pretrain_global_step,
+                                       self.char_embeddings]
+    self.pretraining_trainable_vars.extend(self.encoder_train_vars +
+                                           self.pretraining_decoder_train_vars)
+
+    self.cluster_model_trainable_vars = [self.global_step,
+                                         self.char_embeddings,
+                                         self.cluster_embeddings]
+    self.cluster_model_trainable_vars.extend(self.encoder_train_vars +
+                                             self.posterior_train_vars +
+                                             self.decoder_train_vars)
+
+    self.print_variables_in_collection(
+      self.pretraining_trainable_vars)
+
+    self.print_variables_in_collection(
+      self.cluster_model_trainable_vars)
 
 
 
@@ -172,10 +193,8 @@ class String_Clustering_VAE(Model):
                                 decoder_models=self.decoder_models,
                                 posterior_model=self.posterior_model,
                                 num_clusters=self.num_clusters,
-                                learning_rate=self.learning_rate)
-
-    self.print_all_variables()
-    self.print_trainable_variables()
+                                learning_rate=self.learning_rate,
+                                scope_name=self.loss_graph_scope)
 
     start_time = time.time()
 
@@ -260,9 +279,18 @@ class String_Clustering_VAE(Model):
 
   def pretraining(self):
   # Make the loss graph
-    self.pretraining_decoder.pretrain_loss_graph(input_text=self.in_text,
-                                                 text_lengths=self.text_lengths,
-                                                 learning_rate=self.learning_rate)
+    self.pretraining_decoder.pretrain_loss_graph(
+      input_text=self.in_text,
+      text_lengths=self.text_lengths,
+      learning_rate=self.learning_rate,
+      scope_name=self.pretrain_loss_graph_scope)
+
+    self.pretrain_loss_vars = self.scope_vars_list(
+      scope_name=self.pretrain_loss_graph_scope,
+      var_list=tf.all_variables())
+
+    print("\nPRETRAIN LOSS GRAPH VARS")
+    self.print_variables_in_collection(self.pretrain_loss_vars)
 
     start_time = time.time()
 
@@ -273,8 +301,13 @@ class String_Clustering_VAE(Model):
     # First initialize all variables then loads checkpoints
     # Load variables that are needed from checkpoint.
     # Initialize rest
-    self.sess.run(tf.initialize_all_variables())
-    self.load(self.checkpoint_dir)
+    load_status = self.load(checkpoint_dir=self.checkpoint_dir,
+              var_list=self.pretraining_trainable_vars,
+              attrs=self._pretrain_attrs)
+
+    self.sess.run(tf.initialize_variables(self.pretrain_loss_vars))
+    if not load_status:
+      self.sess.run(tf.initialize_variables(self.pretraining_trainable_vars))
 
     start = self.pretrain_global_step.eval()
 
@@ -323,7 +356,10 @@ class String_Clustering_VAE(Model):
         writer.add_summary(summary_str, epoch)
 
       if epoch != 0 and epoch % 200 == 0:
-        self.save(self.checkpoint_dir, global_step=0)
+        self.save(checkpoint_dir=self.checkpoint_dir,
+                  var_list=self.pretraining_trainable_vars,
+                  attrs=self._pretrain_attrs,
+                  global_step=self.pretrain_global_step)
 
 
   def print_all_variables(self):

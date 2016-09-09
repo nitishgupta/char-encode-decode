@@ -11,7 +11,7 @@ class LossGraph(Model):
 
   def __init__(self, batch_size, input_text, text_lengths,
                decoder_models, posterior_model, num_clusters,
-               learning_rate):
+               learning_rate, scope_name):
 
     self.num_clusters = num_clusters
     self.batch_size = batch_size
@@ -26,7 +26,7 @@ class LossGraph(Model):
 
     mask = self.get_mask(text_lengths, text_max_length)
 
-    with tf.variable_scope("string_clustering_vae_loss") as s:
+    with tf.variable_scope(scope_name) as s:
       # i-th element is the loss for the i-th cluster averaged over batch,
       # first by weighing each seq in the batch with its respective cluster
       # posterior prob

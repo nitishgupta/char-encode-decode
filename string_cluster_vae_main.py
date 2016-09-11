@@ -19,17 +19,17 @@ flags.DEFINE_string("model", "string_clustering", "The name of model [nvdm, nasm
 flags.DEFINE_string("dataset", "string_clustering", "The name of dataset [ptb]")
 flags.DEFINE_string("checkpoint_dir", "checkpoint", "Directory name to save the checkpoints [checkpoints]")
 flags.DEFINE_boolean("inference", False, "False for training, True for testing [False]")
-flags.DEFINE_integer("batch_size", 1, "Batch Size for training and testing")
-flags.DEFINE_integer("char_embedding_dim", 5, "Character Embedding Size")
-flags.DEFINE_integer("num_clusters", 4, "Number of clusters to induce")
-flags.DEFINE_integer("cluster_embed_dim", 5, "Cluster Embedding Size")
+flags.DEFINE_integer("batch_size", 3, "Batch Size for training and testing")
+flags.DEFINE_integer("char_embedding_dim", 50, "Character Embedding Size")
+flags.DEFINE_integer("num_clusters", 10, "Number of clusters to induce")
+flags.DEFINE_integer("cluster_embed_dim", 10, "Cluster Embedding Size")
 flags.DEFINE_integer("encoder_num_layers", 2, "Num of Layers in encoder network")
-flags.DEFINE_integer("encoder_lstm_size", 5, "Size of encoder lstm layers")
+flags.DEFINE_integer("encoder_lstm_size", 10, "Size of encoder lstm layers")
 flags.DEFINE_integer("decoder_num_layers", 2, "Num of Layers in decoder network")
-flags.DEFINE_integer("decoder_lstm_size", 5, "Size of decoder lstm layers")
+flags.DEFINE_integer("decoder_lstm_size", 10, "Size of decoder lstm layers")
 flags.DEFINE_integer("ff_num_layers", 2, "Num of Layers in ff network")
 flags.DEFINE_integer("ff_hidden_layer_size", 5, "Size of ff hidden layers")
-flags.DEFINE_float("reg_constant", 0.005, "Regularization constant for posterior regularization [10000]")
+flags.DEFINE_float("reg_constant", 0.00, "Regularization constant for posterior regularization [10000]")
 
 
 FLAGS = flags.FLAGS
@@ -54,7 +54,7 @@ def main(_):
     m = MODELS[FLAGS.model]
     model = m(sess=sess, reader=reader, dataset=FLAGS.dataset,
               max_steps=FLAGS.max_steps,
-              pretrain_max_steps=201,
+              pretrain_max_steps=FLAGS.pretraining_steps,
               char_embedding_dim=FLAGS.char_embedding_dim,
               num_clusters=FLAGS.num_clusters,
               cluster_embed_dim=FLAGS.cluster_embed_dim,
@@ -65,6 +65,7 @@ def main(_):
               ff_num_layers=FLAGS.ff_num_layers,
               ff_hidden_layer_size=FLAGS.ff_hidden_layer_size,
               learning_rate=FLAGS.learning_rate,
+              reg_constant=FLAGS.reg_constant,
               checkpoint_dir=FLAGS.checkpoint_dir)
 
     if FLAGS.inference:

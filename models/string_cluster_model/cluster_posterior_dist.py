@@ -76,7 +76,7 @@ class ClusterPosteriorDistribution(Model):
         self.network_output = tf.matmul(output, self.final_weights) + self.final_bias
 
 
-      self.network_output = tf.mul(self.network_output, 100.0)
+      #self.network_output = tf.mul(self.network_output, 100.0)
       # [batch_size, num_clusters]
       self.cluster_posterior_dist = tf.nn.softmax(logits=self.network_output,
                                                   name="cluster_posterior_distribution")

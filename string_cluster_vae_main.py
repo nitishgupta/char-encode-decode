@@ -13,23 +13,25 @@ flags = tf.app.flags
 flags.DEFINE_float("learning_rate", 0.001, "Learning rate of adam optimizer [0.001]")
 flags.DEFINE_float("decay_rate", 0.96, "Decay rate of learning rate [0.96]")
 flags.DEFINE_float("decay_step", 10000, "# of decay step for learning rate decaying [10000]")
-flags.DEFINE_integer("max_steps", 201, "Maximum of iteration [450000]")
-flags.DEFINE_integer("pretraining_steps", 201, "Number of steps to run pretraining")
+flags.DEFINE_integer("max_steps", 100, "Maximum of iteration [450000]")
+flags.DEFINE_integer("pretraining_steps", 10000, "Number of steps to run pretraining")
 flags.DEFINE_string("model", "string_clustering", "The name of model [nvdm, nasm]")
-flags.DEFINE_string("dataset", "string_clustering", "The name of dataset [ptb]")
+flags.DEFINE_string("dataset", "freebase_alias", "The name of dataset [ptb]")
 flags.DEFINE_string("checkpoint_dir", "checkpoint", "Directory name to save the checkpoints [checkpoints]")
 flags.DEFINE_boolean("inference", False, "False for training, True for testing [False]")
-flags.DEFINE_integer("batch_size", 3, "Batch Size for training and testing")
+flags.DEFINE_integer("batch_size", 100, "Batch Size for training and testing")
 flags.DEFINE_integer("char_embedding_dim", 50, "Character Embedding Size")
-flags.DEFINE_integer("num_clusters", 10, "Number of clusters to induce")
-flags.DEFINE_integer("cluster_embed_dim", 10, "Cluster Embedding Size")
-flags.DEFINE_integer("encoder_num_layers", 2, "Num of Layers in encoder network")
-flags.DEFINE_integer("encoder_lstm_size", 10, "Size of encoder lstm layers")
-flags.DEFINE_integer("decoder_num_layers", 2, "Num of Layers in decoder network")
-flags.DEFINE_integer("decoder_lstm_size", 10, "Size of decoder lstm layers")
+flags.DEFINE_integer("num_clusters", 1, "Number of clusters to induce")
+flags.DEFINE_integer("cluster_embed_dim", 100, "Cluster Embedding Size")
+flags.DEFINE_integer("encoder_num_layers", 1, "Num of Layers in encoder network")
+flags.DEFINE_integer("encoder_lstm_size", 100, "Size of encoder lstm layers")
+flags.DEFINE_integer("decoder_num_layers", 1, "Num of Layers in decoder network")
+flags.DEFINE_integer("decoder_lstm_size", 100, "Size of decoder lstm layers")
 flags.DEFINE_integer("ff_num_layers", 2, "Num of Layers in ff network")
-flags.DEFINE_integer("ff_hidden_layer_size", 5, "Size of ff hidden layers")
+flags.DEFINE_integer("ff_hidden_layer_size", 100, "Size of ff hidden layers")
 flags.DEFINE_float("reg_constant", 0.00, "Regularization constant for posterior regularization [10000]")
+flags.DEFINE_float("dropout_keep_prob", 0.6, "Dropout Keep Probability")
+
 
 
 FLAGS = flags.FLAGS
@@ -65,11 +67,13 @@ def main(_):
               ff_num_layers=FLAGS.ff_num_layers,
               ff_hidden_layer_size=FLAGS.ff_hidden_layer_size,
               learning_rate=FLAGS.learning_rate,
+              dropout_keep_prob=FLAGS.dropout_keep_prob,
               reg_constant=FLAGS.reg_constant,
               checkpoint_dir=FLAGS.checkpoint_dir)
 
     if FLAGS.inference:
-      model.inference(FLAGS)
+      print("Doing inference")
+      model.write_encoder_output()
     else:
       model.train(FLAGS)
 

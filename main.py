@@ -18,15 +18,16 @@ flags = tf.app.flags
 flags.DEFINE_float("learning_rate", 0.001, "Learning rate of adam optimizer [0.001]")
 flags.DEFINE_float("decay_rate", 0.96, "Decay rate of learning rate [0.96]")
 flags.DEFINE_float("decay_step", 10000, "# of decay step for learning rate decaying [10000]")
-flags.DEFINE_integer("max_steps", 1002, "Maximum of iteration [450000]")
-flags.DEFINE_integer("h_dim", 4, "The dimension of latent variable [50]")
-flags.DEFINE_integer("embed_dim", 5, "The dimension of word embeddings [500]")
-flags.DEFINE_string("dataset", "char", "The name of dataset [ptb]")
-flags.DEFINE_string("model", "endec", "The name of model [nvdm, nasm]")
+flags.DEFINE_integer("max_steps", 1000000, "Maximum of iteration [450000]")
+flags.DEFINE_integer("h_dim", 100, "The dimension of latent variable [50]")
+flags.DEFINE_integer("embed_dim", 100, "The dimension of word embeddings [500]")
+flags.DEFINE_string("dataset", "freebase", "The name of dataset [ptb]")
+flags.DEFINE_string("model", "clustering", "The name of model [nvdm, nasm]")
 flags.DEFINE_string("checkpoint_dir", "checkpoint", "Directory name to save the checkpoints [checkpoints]")
 flags.DEFINE_boolean("inference", False, "False for training, True for testing [False]")
-flags.DEFINE_integer("batch_size", 3, "Batch Size for training and testing")
+flags.DEFINE_integer("batch_size", 1, "Batch Size for training and testing")
 flags.DEFINE_integer("num_layers", 2, "Batch Size for training and testing")
+flags.DEFINE_integer("num_clusters", 10000, "Number of clusters for VAE clustering")
 FLAGS = flags.FLAGS
 
 MODELS = {
@@ -48,7 +49,13 @@ def main(_):
 
   data_path = "./data/%s" % FLAGS.dataset
   DataLoader = DATA_READER[FLAGS.model]
-  reader = DataLoader(data_dir="./data", dataset_name=FLAGS.dataset, batch_size=FLAGS.batch_size)
+  if FLAGS.model == 'clustering':
+    reader = DataLoader(data_dir="./data",
+                        dataset_name=FLAGS.dataset,
+                        batch_size=FLAGS.batch_size,
+                        contains_id=True)
+  else:
+    reader = DataLoader(data_dir="./data", dataset_name=FLAGS.dataset, batch_size=FLAGS.batch_size)
 
 
   with tf.Session() as sess:
@@ -58,10 +65,11 @@ def main(_):
                 num_steps=FLAGS.max_steps, embed_dim=FLAGS.embed_dim, h_dim=FLAGS.h_dim,
                 learning_rate=FLAGS.learning_rate, checkpoint_dir=FLAGS.checkpoint_dir)
     else:
-      model = m(sess, reader, dataset=FLAGS.dataset, num_clusters=2,
+      model = m(sess, reader, dataset=FLAGS.dataset, num_clusters=FLAGS.num_clusters,
                 num_layers=FLAGS.num_layers, num_steps=FLAGS.max_steps,
                 h_dim=FLAGS.h_dim, embed_dim=FLAGS.embed_dim,
-                learning_rate=FLAGS.learning_rate, checkpoint_dir=FLAGS.checkpoint_dir)
+                learning_rate=FLAGS.learning_rate,
+                checkpoint_dir=FLAGS.checkpoint_dir)
 
     if FLAGS.inference:
       model.inference(FLAGS)

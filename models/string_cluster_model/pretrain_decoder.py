@@ -11,7 +11,8 @@ class PreTrainingDecoderModel(Model):
 
   def __init__(self, num_layers, batch_size, h_dim, dec_input_batch,
                dec_input_lengths, num_char_vocab,
-               char_embeddings, encoder_last_output, scope_name):
+               char_embeddings, encoder_last_output,
+               scope_name, dropout_keep_prob=1.0):
 
     # Num of layers should be same as encoder to carry state
     self.num_layers = num_layers  # Num of layers in encoder and decoder network
@@ -24,8 +25,12 @@ class PreTrainingDecoderModel(Model):
     with tf.variable_scope(scope_name) as scope:
       decoder_cell = tf.nn.rnn_cell.BasicLSTMCell(self.h_dim,
                                                   state_is_tuple=True)
+      decoder_dropout_cell = tf.nn.rnn_cell.DropoutWrapper(cell=decoder_cell,
+                                    input_keep_prob=dropout_keep_prob,
+                                    output_keep_prob=1.0)
+
       self.decoder_network = tf.nn.rnn_cell.MultiRNNCell(
-        [decoder_cell] * self.num_layers, state_is_tuple=True)
+        [decoder_dropout_cell] * self.num_layers, state_is_tuple=True)
 
       # [batch_size, max_time, embedding_dim]
       self.embedded_decoder_input_sequences = tf.nn.embedding_lookup(

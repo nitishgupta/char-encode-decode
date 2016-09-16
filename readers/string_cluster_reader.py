@@ -34,9 +34,9 @@ class StringClusteringReader(object):
     self.padding = '<padding>'
     self.eos_char = '<eos>'
     self.space = ' '
-    self.train_fname = os.path.join(data_dir, dataset_name, 'train.txt')
-    self.valid_fname = os.path.join(data_dir, dataset_name, 'valid.txt')
-    self.test_fname = os.path.join(data_dir, dataset_name, 'test.txt')
+    self.train_fname = os.path.join(data_dir, dataset_name, 'entity.alias.names')
+    self.valid_fname = os.path.join(data_dir, dataset_name, 'entity.alias.names')
+    self.test_fname = os.path.join(data_dir, dataset_name, 'entity.alias.names')
     self.input_fnames = [self.train_fname, self.valid_fname, self.test_fname]
 
 
@@ -54,7 +54,7 @@ class StringClusteringReader(object):
     self.char_vocab_size = len(self.idx2char)
     print("Char vocab size: %d" % (self.char_vocab_size))
 
-    print(self.char2idx)
+    #print(self.char2idx)
 
     print("Creating train, valid and test data file read objects")
     self.dataf = [open(fname) for fname in self.input_fnames]
@@ -128,13 +128,14 @@ class StringClusteringReader(object):
     Args:
       data_idx: Indexes the dataset partition. 0: train, 1: valid, 2: test
     '''
-    orig_text_batch, dec_in_text_batch = [], []
+    orig_text_batch, dec_in_text_batch, ids_batch = [], [], []
 
     while len(orig_text_batch) < self.batch_size:
       line = self._read_line(data_idx).strip()
 
       # Split at "\t" to facilitate more information
       text = line.split("\t")[0].strip()
+      en_id = line.split("\t")[1].strip()
 
       # text_char_idx : has both <go> and <eos>
       text_char_idx = self._get_text_2_charidx(text, False)
@@ -143,8 +144,10 @@ class StringClusteringReader(object):
 
       orig_text_batch.append(orig_text_char_idx)
       dec_in_text_batch.append(dec_in_char_idx)
+      ids_batch.append(en_id)
 
-    return orig_text_batch, dec_in_text_batch
+
+    return orig_text_batch, dec_in_text_batch, ids_batch
 
   def next_padded_batch(self, data_idx):
     '''Returns batch of padded in_text and corresponding out text indexed
@@ -152,7 +155,7 @@ class StringClusteringReader(object):
 
     The padded length of in_text_batch and out_text_batch can be different.
     '''
-    (orig_text_batch, dec_in_text_batch) = self._next_batch(data_idx)
+    (orig_text_batch, dec_in_text_batch, ids_batch) = self._next_batch(data_idx)
     # The lengths for both orig_text_batch and dec_in_text_batch are same
     text_lengths = [len(i) for i in  orig_text_batch]
     text_max_length = max(text_lengths)
@@ -161,7 +164,7 @@ class StringClusteringReader(object):
       orig_text_batch[i].extend([0]*(text_max_length - text_lengths[i]))
       dec_in_text_batch[i].extend([0]*(text_max_length - text_lengths[i]))
 
-    return (orig_text_batch, dec_in_text_batch, text_lengths)
+    return (orig_text_batch, dec_in_text_batch, text_lengths, ids_batch)
 
   def next_train_batch(self):
     return self.next_padded_batch(data_idx=0)
@@ -188,10 +191,10 @@ class StringClusteringReader(object):
 
 if __name__ == '__main__':
   b = StringClusteringReader(data_dir="data",
-                             dataset_name="string_clustering",
+                             dataset_name="freebase",
                              batch_size=3)
   for i in range(0, 5):
-    (text_batch, dec_in_text_batch, lengths) = b.next_padded_batch(0)
+    (text_batch, dec_in_text_batch, lengths, ids_batch) = b.next_padded_batch(0)
     print("it: ", text_batch)
     print("dit: ", dec_in_text_batch)
     print("ol: ", lengths)

@@ -17,16 +17,21 @@ class ClusteringDataLoader(object):
   '''For data in : x1\tx2 format where x1 and x2 are doubles.
   2-D dimensional data needs to be clustered
   '''
-  def __init__(self, data_dir, dataset_name, batch_size):
+  def __init__(self, data_dir, dataset_name, batch_size, contains_id):
     self.data_fname = os.path.join(data_dir, dataset_name, 'data.txt')
     self.inference_data_fname = os.path.join(data_dir, dataset_name, 'data.txt')
     self.input_fnames = [self.data_fname, self.inference_data_fname]
+    self.contains_id = contains_id
 
 
     self.batch_size = batch_size
     print("###################    BATCH SIZE #####   ", self.batch_size)
 
     self.data_dimensions = self.infer_data_dimensions()
+    if self.contains_id:
+      self.data_dimensions -= 1
+
+    print("\n Number of dimensions : %d \n" % self.data_dimensions)
 
     print("Creating data file read objects")
     self.dataf = [open(fname) for fname in self.input_fnames]
@@ -51,10 +56,6 @@ class ClusteringDataLoader(object):
       self.dataf[data_idx].close()
       self.dataf[data_idx] = open(self.input_fnames[data_idx])
       line = self.dataf[data_idx].readline()
-
-      #setting data_dimensions
-      if self.data_dimensions == -1:
-        self.data_dimensions = len(line.strip().split("\t"))
     return line
 
   def _next_batch(self, data_idx=0):
@@ -67,8 +68,10 @@ class ClusteringDataLoader(object):
 
     while len(data_batch) < self.batch_size:
       line = self._read_line(data_idx).strip()
-      assert len(line.split("\t")) == 2
       data_point = line.split("\t")
+      if self.contains_id:
+        data_id = data_point[0]
+        data_point = data_point[1:]
       data_batch.append(data_point)
 
     return data_batch
@@ -80,8 +83,8 @@ class ClusteringDataLoader(object):
     return self._next_batch(data_idx=1)
 
 if __name__ == '__main__':
-  b = ClusteringDataLoader(data_dir="data", 
-                           dataset_name="clustering", 
+  b = ClusteringDataLoader(data_dir="data",
+                           dataset_name="clustering",
                            batch_size=3)
   for i in range(0, 5):
     data_batch = b.next_train_batch()

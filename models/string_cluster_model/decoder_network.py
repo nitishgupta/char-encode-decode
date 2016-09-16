@@ -12,7 +12,7 @@ class DecoderModel(Model):
   def __init__(self, num_layers, batch_size, h_dim, dec_input_batch,
                dec_input_lengths, num_char_vocab,
                char_embeddings, cluster_embeddings, cluster_num,
-               scope_name):
+               scope_name, dropout_keep_prob=1.0):
 
     self.num_layers = num_layers  # Num of layers in the encoder and decoder network
 
@@ -31,8 +31,12 @@ class DecoderModel(Model):
 
       decoder_cell = tf.nn.rnn_cell.BasicLSTMCell(self.h_dim,
                                                   state_is_tuple=True)
+      decoder_dropout_cell = tf.nn.rnn_cell.DropoutWrapper(
+        cell=decoder_cell,
+        input_keep_prob=dropout_keep_prob,
+        output_keep_prob=1.0)
       self.decoder_network = tf.nn.rnn_cell.MultiRNNCell(
-        [decoder_cell] * self.num_layers, state_is_tuple=True)
+        [decoder_dropout_cell] * self.num_layers, state_is_tuple=True)
 
       # [batch_size, max_time, embedding_dim]
       self.embedded_decoder_input_sequences = tf.nn.embedding_lookup(

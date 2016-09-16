@@ -44,8 +44,8 @@ class Clustering_VAE(Model):
   def build_model(self, batch_size):
     with tf.variable_scope("encoder_decoder") as scope:
       self.x_input = tf.placeholder(tf.float32,
-                      [batch_size, self.data_dimensions],
-                      name="x_input")
+                                    [batch_size, self.data_dimensions],
+                                    name="x_input")
 
       self.cluster_embeddings = tf.get_variable(
         name="cluster_embed", shape=[self.num_clusters, self.embed_dim],
@@ -98,10 +98,12 @@ class Clustering_VAE(Model):
       # Passing x_input through feed-forward network made above
       self.encoder_output = tf.matmul(self.x_input, self.enc_initial_weights) + self.enc_initial_bias
       if self.num_layers > 1:
-        output = self.encoder_output
+        output = tf.nn.relu(self.encoder_output)
         for layer in range(0, len(self.enc_internal_weight_matrices)):
           output = tf.matmul(output,
                              self.enc_internal_weight_matrices[layer]) + self.enc_internal_biases[layer]
+          output = tf.nn.relu(output)
+
         self.encoder_output = tf.matmul(output, self.enc_final_weights) + self.enc_final_bias
       # [batch_size, num_clusters]
       self.cluster_probs = tf.nn.softmax(self.encoder_output, "cluster_probs")
@@ -149,10 +151,11 @@ class Clustering_VAE(Model):
       # Passing cluster_repr_matrix through feed-forward network made above
       self.decoder_output = tf.matmul(self.cluster_embeddings, self.dec_initial_weights) + self.dec_initial_bias
       if self.num_layers > 1:
-        output = self.decoder_output
+        output = tf.nn.relu(self.decoder_output)
         for layer in range(0, len(self.dec_internal_weight_matrices)):
           output = tf.matmul(output,
                              self.dec_internal_weight_matrices[layer]) + self.dec_internal_biases[layer]
+          output = tf.nn.relu(output)
         self.decoder_output = tf.matmul(output, self.dec_final_weights) + self.dec_final_bias
       # [num_clusters, data_dimensions]
       self.reconstructed_x = self.decoder_output
@@ -161,7 +164,7 @@ class Clustering_VAE(Model):
     # Reconstruction loss
     with tf.variable_scope("reconstruction_loss") as scope:
       ''' Expected P(X|Z) under the posterior distribution Q(Z|X): self.cluster_probs'''
-      # [batch_size, data_dimensions]
+      # [batch_size, data_dimensions] = [B, C] X [C, data_dim]
       self.E_Q_PX = tf.matmul(self.cluster_probs, self.reconstructed_x)
 
       squared_diff = tf.squared_difference(self.x_input, self.E_Q_PX,
@@ -170,11 +173,12 @@ class Clustering_VAE(Model):
                                             name="reconstruct_loss") / self.batch_size
 
       # Want to maximize entropy i.e. push towards uniform posterior
-      self.entropy_loss = -tf.reduce_sum(tf.mul(tf.log(self.cluster_probs),
-                                                self.cluster_probs),
-                                         name="posterior_entropy") / self.batch_size
+      # Minimize -entropy = \sum{...} - hence no negative
+      self.entropy_loss = tf.reduce_sum(tf.mul(tf.log(self.cluster_probs),
+                                               self.cluster_probs),
+                                        name="posterior_entropy") / self.batch_size
 
-      self.total_loss = self.reconstruct_loss + self.entropy_loss
+      self.total_loss = self.reconstruct_loss + 0.0 * self.entropy_loss
 
       self.optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate)
       self.grads_and_vars = self.optimizer.compute_gradients(self.total_loss,
@@ -192,11 +196,14 @@ class Clustering_VAE(Model):
     start_time = time.time()
 
     merged_sum = tf.merge_all_summaries()
+    log_dir = self.get_log_dir(root_log_dir="./logs/")
+    writer = tf.train.SummaryWriter(log_dir, self.sess.graph)
     writer = tf.train.SummaryWriter("./logs/", self.sess.graph)
 
     # First initialize all variables then loads checkpoints
     self.sess.run(tf.initialize_all_variables())
-    self.load(self.checkpoint_dir)
+    self.load(checkpoint_dir=self.checkpoint_dir,
+              attrs=self._attrs)
 
     start = self.global_step.eval()
 
@@ -215,12 +222,14 @@ class Clustering_VAE(Model):
        reconstruct_loss,
        entropy_loss,
        total_loss,
-       _) = self.sess.run([self.cluster_probs,
+       _,
+       summary_str) = self.sess.run([self.cluster_probs,
                            self.E_Q_PX,
                            self.reconstruct_loss,
                            self.entropy_loss,
                            self.total_loss,
-                           self.optim_op],
+                           self.optim_op,
+                           merged_sum],
                           feed_dict=feed_dict)
 
       self.global_step.assign(epoch).eval()
@@ -229,22 +238,28 @@ class Clustering_VAE(Model):
       if epoch % 100 == 0:
         print("Epoch: [%2d] Traindata epoch: [%4d] time: %4.4f, loss: %.8f"
               % (epoch, self.reader.data_epochs[0], time.time() - start_time, total_loss))
-        print("data")
-        print(data_batch)
-        print("rec_x")
-        print(re_x)
-        print("Cluster Probs")
-        print(cluster_probs)
+        #print("data")
+        #print(data_batch)
+        #print("rec_x")
+        #print(re_x)
+        #print("Cluster Probs")
+        #print(cluster_probs)
         print("Reconstruct, Entropy, Total Loss : ")
         print(reconstruct_loss)
-        print(entropy_loss)
+        print(-entropy_loss)
         print(total_loss)
+        print("Max Prob")
+        print(np.amax(cluster_probs, axis=1))
+        print("Max Prob Index")
+        print(np.argmax(cluster_probs, axis=1))
 
-      # if epoch % 2 == 0:
-      #   writer.add_summary(summary_str, epoch)
+      if epoch % 2 == 0:
+        writer.add_summary(summary_str, epoch)
 
-      if epoch != 0 and epoch % 500 == 0:
-        self.save(self.checkpoint_dir, self.global_step)
+      if epoch != 0 and epoch % 10000 == 0:
+        self.save(checkpoint_dir=self.checkpoint_dir,
+                  attrs=self._attrs,
+                  global_step=self.global_step)
 
   def inference_graph(self, cluster_num):
     cluster_embedding = tf.nn.embedding_lookup(self.cluster_embeddings,
@@ -274,5 +289,26 @@ class Clustering_VAE(Model):
     re_x = self.sess.run(x, feed_dict={cluster_num:[1]})
 
     print(re_x)
+
+  def cluster_assignment(self):
+    max_steps = 10
+    elf.load(checkpoint_dir=self.checkpoint_dir,
+              attrs=self._attrs)
+    for epoch in range(0, max_steps):
+      # for idx, text_batch, labels_batch, lengths in enumerate(self.reader.next_train_batch()):
+      data_batch = self.reader.next_train_batch()
+
+      feed_dict = {self.x_input: data_batch}
+
+      (cluster_probs) = self.sess.run([self.cluster_probs],
+                                      feed_dict=feed_dict)
+      print("Max Prob")
+      print(np.amax(cluster_probs, axis=1))
+      print("Max Prob Index")
+      cluster_labels = np.argmax(cluster_probs, axis=1).tolist()
+      print(cluster_labels)
+
+      
+
 
 

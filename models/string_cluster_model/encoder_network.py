@@ -10,7 +10,7 @@ class EncoderModel(Model):
   """Unsupervised Clustering using Discrete-State VAE"""
 
   def __init__(self, num_layers, batch_size, h_dim, input_batch, input_lengths,
-               char_embeddings, scope_name):
+               char_embeddings, scope_name, dropout_keep_prob=1.0):
 
     self.num_layers = num_layers  # Num of layers in the encoder and decoder network
 
@@ -22,8 +22,12 @@ class EncoderModel(Model):
 
     with tf.variable_scope(scope_name) as scope:
       encoder_cell = tf.nn.rnn_cell.BasicLSTMCell(h_dim, state_is_tuple=True)
+      encoder_dropout_cell = tf.nn.rnn_cell.DropoutWrapper(
+        cell=encoder_cell,
+        input_keep_prob=dropout_keep_prob,
+        output_keep_prob=1.0)
       self.encoder_network = tf.nn.rnn_cell.MultiRNNCell(
-        [encoder_cell] * self.num_layers, state_is_tuple=True)
+        [encoder_dropout_cell] * self.num_layers, state_is_tuple=True)
 
       #[batch_size, decoder_max_length, embed_dim]
       self.embedded_encoder_sequences = tf.nn.embedding_lookup(char_embeddings,
@@ -38,6 +42,10 @@ class EncoderModel(Model):
                                            seq_lengths=tf.to_int64(input_lengths),
                                            seq_dim=1,
                                            batch_dim=0)
-      en_last_output = tf.slice(input_=reverse_output, begin=[0,0,0], size=[self.batch_size, 1, -1])
+      en_last_output = tf.slice(input_=reverse_output,
+                                begin=[0,0,0],
+                                size=[self.batch_size, 1, -1])
       # [batch_size, h_dim]
-      self.encoder_last_output = tf.reshape(en_last_output, shape=[self.batch_size, -1], name="encoder_last_output")
+      self.encoder_last_output = tf.reshape(en_last_output,
+                                            shape=[self.batch_size, -1],
+                                            name="encoder_last_output")

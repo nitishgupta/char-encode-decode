@@ -73,7 +73,8 @@ def main(_):
 
     if FLAGS.inference:
       print("Doing inference")
-      model.write_encoder_output()
+      assert FLAGS.batch_size == 1, "Batch Size should be 1 for inference"
+      model.pretraining_inference(FLAGS)
     else:
       model.train(FLAGS)
 

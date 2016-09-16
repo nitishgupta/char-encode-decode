@@ -247,7 +247,8 @@ class String_Clustering_VAE(Model):
 
       (orig_text_batch,
        dec_in_text_batch,
-       text_lengths) = self.reader.next_train_batch()
+       text_lengths,
+       ids_batch) = self.reader.next_train_batch()
 
       feed_dict = {self.in_text: orig_text_batch,
                    self.dec_input_batch: dec_in_text_batch,
@@ -359,6 +360,7 @@ class String_Clustering_VAE(Model):
       feed_dict = {self.in_text: orig_text_batch,
                    self.dec_input_batch: dec_in_text_batch,
                    self.text_lengths: text_lengths}
+
       fetch_tensors = [self.pretraining_decoder.loss,
                        self.encoder_model.encoder_last_output,
                        self.pretraining_decoder.raw_scores]
@@ -468,33 +470,98 @@ class String_Clustering_VAE(Model):
       print("  %s" % var.name)
 
 
-  # def inference_graph(self, cluster_num):
-  #   cluster_embedding = tf.nn.embedding_lookup(self.cluster_embeddings,
-  #                                              cluster_num)
+  def pretraining_inference(self, config):
+    assert self.batch_size == 1,  "Batch size should be 1 during inference."
 
-  #   decoder_output = tf.matmul(cluster_embedding,
-  #                              self.dec_initial_weights) + self.dec_initial_bias
-  #   if self.num_layers > 1:
-  #     output = decoder_output
-  #     for layer in range(0, len(self.dec_internal_weight_matrices)):
-  #       output = tf.matmul(output,
-  #                          self.dec_internal_weight_matrices[layer]) + self.dec_internal_biases[layer]
-  #     decoder_output = tf.matmul(output, self.dec_final_weights) + self.dec_final_bias
-  #   # [1, data_dimensions]
-  #   reconstructed_x = decoder_output
-  #   return reconstructed_x
+    print("Loading pre-training checkpoint...")
+    load_status = self.load(checkpoint_dir=self.checkpoint_dir,
+                            var_list=self.pretraining_trainable_vars,
+                            attrs=self._pretrain_attrs)
 
-  # def inference(self, config):
-  #   cluster_num = tf.placeholder(dtype=tf.int32, shape=[1], name="cluster_num")
-  #   x = self.inference_graph(cluster_num)
+    start = self.pretrain_global_step.eval()
+    print("Pre-Training epochs done: %d" % start)
 
-  #   self.load(config.checkpoint_dir)
+    for num in range(0, 20):
+      (orig_text_batch,
+       dec_in_text_batch,
+       text_lengths,
+       ids_batch) = self.reader.next_test_batch()
 
-  #   global_step = self.global_step.eval()
-  #   print("Training epochs done: %d" % global_step)
+      feed_dict = {self.in_text: orig_text_batch,
+                   self.text_lengths: text_lengths}
 
-  #   re_x = self.sess.run(x, feed_dict={cluster_num:[1]})
+      encoder_last_output = self.sess.run(self.encoder_model.encoder_last_output,
+                                          feed_dict=feed_dict)
 
-  #   print(re_x)
+      # List of decoder input state tensor names
+      dec_in_states_tensornames = self.get_states_list(
+        self.pretraining_decoder.dec_in_states)
+      # Feed zeros of size [B, LSTM_SIZE] when starting.
+      num_zero_vectors = len(dec_in_states_tensornames)
+      zero_vector = [[0.0]*self.encoder_lstm_size]*self.batch_size
+      zero_states = [zero_vector] * num_zero_vectors
+
+      dict_dec_in_states = self.get_states_dict(dec_in_states_tensornames,
+                                                zero_states)
+
+      _, t = self.reader.charidx_to_text(orig_text_batch[0])
+      print("Input : ", t)
+
+      # Now start decoding
+      decoded_sequence = []
+      curr_char = self.reader.char2idx[self.reader.go]
+
+      while curr_char != self.reader.char2idx[self.reader.eos_char]:
+        # dec_in_batch is a batch 1 and length 1 sequence
+
+        # get output states tensor names to fetch
+        dec_out_states_names = self.get_states_list(
+          self.pretraining_decoder.dec_output_states)
+        dec_feed_dict = {self.dec_input_batch: [[curr_char]],
+                         self.text_lengths: [1],
+                         self.encoder_model.encoder_last_output: encoder_last_output}
+        dec_feed_dict.update(dict_dec_in_states)
+        fetches = self.sess.run([self.pretraining_decoder.raw_scores] + dec_out_states_names,
+                               feed_dict=dec_feed_dict)
+        raw_scores = fetches[0]
+        dec_out_states_evaluated = fetches[1:]
+        # Current output state tensor as input to next time step
+        dict_dec_in_states = self.get_states_dict(dec_in_states_tensornames,
+                                                  dec_out_states_evaluated)
+
+        char_ids = np.argmax(raw_scores, axis=2)
+        curr_char = char_ids[0,0]
+        decoded_sequence.append(curr_char)
+      #end-while
+
+      t, tt = self.reader.charidx_to_text(decoded_sequence)
+      print(tt)
+
+
+  def get_states_list(self, states):
+    """
+    given a 'states' variable from a tensorflow model,
+    return a flattened list of states
+    """
+    states_list = [] # flattened list of all tensors in states
+    for layer in states:
+      for state in layer:
+        states_list.append(state)
+
+    return states_list
+
+  def get_states_dict(self, states_name, states_evaluated):
+    """
+    given a 'states' variable from a tensorflow model,
+    return a dict of { tensor : evaluated value }
+    """
+    states_dict = {} # dict of { tensor : value }
+    layer_num = 0
+    state_num = 0
+    for i, state_name in enumerate(states_name):
+      states_dict[state_name] = states_evaluated[i]
+
+    return states_dict
+
 
 

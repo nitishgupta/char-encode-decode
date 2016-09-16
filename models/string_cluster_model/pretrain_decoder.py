@@ -38,8 +38,10 @@ class PreTrainingDecoderModel(Model):
 
       self.append_encoder_last_output(encoder_last_output=encoder_last_output)
 
+      self.dec_in_states = self.decoder_network.zero_state(self.batch_size, tf.float32)
       self.dec_outputs, self.dec_output_states = tf.nn.dynamic_rnn(
         cell=self.decoder_network, inputs=self.decoder_input,
+        initial_state=self.dec_in_states,
         sequence_length=dec_input_lengths,
         dtype=tf.float32)
 

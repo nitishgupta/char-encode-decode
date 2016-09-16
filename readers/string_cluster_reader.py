@@ -35,8 +35,8 @@ class StringClusteringReader(object):
     self.eos_char = '<eos>'
     self.space = ' '
     self.train_fname = os.path.join(data_dir, dataset_name, 'entity.alias.names')
-    self.valid_fname = os.path.join(data_dir, dataset_name, 'entity.alias.names')
-    self.test_fname = os.path.join(data_dir, dataset_name, 'entity.alias.names')
+    self.valid_fname = os.path.join(data_dir, dataset_name, 'entity.alias.names.test')
+    self.test_fname = os.path.join(data_dir, dataset_name, 'entity.alias.names.test')
     self.input_fnames = [self.train_fname, self.valid_fname, self.test_fname]
 
 
@@ -168,6 +168,9 @@ class StringClusteringReader(object):
 
   def next_train_batch(self):
     return self.next_padded_batch(data_idx=0)
+
+  def next_test_batch(self):
+    return self.next_padded_batch(data_idx=1)
 
   def make_vocab(self, input_files, vocab_fname):
     char2idx = {}

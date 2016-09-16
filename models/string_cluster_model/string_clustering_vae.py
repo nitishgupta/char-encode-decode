@@ -276,7 +276,7 @@ class String_Clustering_VAE(Model):
        entropy_loss,
        total_loss,
        post_model_out,
-       encoder_last_output] = fetchess
+       encoder_last_output] = fetches
 
       if epoch % 10 == 0:
         ### DEBUG

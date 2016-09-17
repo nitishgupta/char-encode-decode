@@ -410,9 +410,9 @@ class String_Clustering_VAE(Model):
 
 
   def write_encoder_output(self):
-    write_path = "data/freebase/entity_encoder.repr"
+    write_path = "/save/ngupta19/freebase_alias/entity_encoder.repr"
     f = open(write_path, 'wt')
-    num_examples_to_write = 1000000
+    num_examples_to_write = 1604207
     start_time = time.time()
 
     # (Try) Load the pretraining model trainable variables
@@ -453,6 +453,9 @@ class String_Clustering_VAE(Model):
       f.write(text + "\t" + last_output_repr)
       if epoch != (num_examples_to_write -1):
         f.write("\n")
+      if epoch % 10000 == 0:
+        print("%d examples done : " % epoch)
+    #end-for
     f.close()
 
 

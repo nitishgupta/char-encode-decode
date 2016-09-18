@@ -14,8 +14,8 @@ def load(fname):
 
 
 class ClusteringDataLoader(object):
-  '''For data in : x1\tx2 format where x1 and x2 are doubles.
-  2-D dimensional data needs to be clustered
+  '''For data in : id \t x format where x is coordinates of multi-dimensional
+  input
   '''
   def __init__(self, data_dir, dataset_name, batch_size, contains_id):
     self.data_fname = os.path.join(data_dir, dataset_name, 'data.txt')

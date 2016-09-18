@@ -15,19 +15,19 @@ from models.string_cluster_model.clustering_string import Clustering_String
 
 
 flags = tf.app.flags
-flags.DEFINE_float("learning_rate", 0.001, "Learning rate of adam optimizer [0.001]")
+flags.DEFINE_float("learning_rate", 0.0001, "Learning rate of adam optimizer [0.001]")
 flags.DEFINE_float("decay_rate", 0.96, "Decay rate of learning rate [0.96]")
 flags.DEFINE_float("decay_step", 10000, "# of decay step for learning rate decaying [10000]")
-flags.DEFINE_integer("max_steps", 1000000, "Maximum of iteration [450000]")
+flags.DEFINE_integer("max_steps", 40000, "Maximum of iteration [450000]")
 flags.DEFINE_integer("h_dim", 100, "The dimension of latent variable [50]")
 flags.DEFINE_integer("embed_dim", 100, "The dimension of word embeddings [500]")
-flags.DEFINE_string("dataset", "freebase", "The name of dataset [ptb]")
+flags.DEFINE_string("dataset", "freebase_alias", "The name of dataset [ptb]")
 flags.DEFINE_string("model", "clustering", "The name of model [nvdm, nasm]")
 flags.DEFINE_string("checkpoint_dir", "checkpoint", "Directory name to save the checkpoints [checkpoints]")
 flags.DEFINE_boolean("inference", False, "False for training, True for testing [False]")
-flags.DEFINE_integer("batch_size", 1, "Batch Size for training and testing")
+flags.DEFINE_integer("batch_size", 100, "Batch Size for training and testing")
 flags.DEFINE_integer("num_layers", 2, "Batch Size for training and testing")
-flags.DEFINE_integer("num_clusters", 10000, "Number of clusters for VAE clustering")
+flags.DEFINE_integer("num_clusters", 1000, "Number of clusters for VAE clustering")
 FLAGS = flags.FLAGS
 
 MODELS = {

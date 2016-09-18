@@ -119,10 +119,11 @@ class Clustering_VAE(Model):
                                        shape=[self.data_dimensions],
                                        initializer=tf.constant_initializer())
       else:
-        self.dec_initial_weights = tf.get_variable(name="initial_weights",
-                                       shape=[self.embed_dim, self.h_dim],
-                                       initializer=tf.random_normal_initializer(
-                                        mean=0.0, stddev=2.0/(self.h_dim+self.h_dim)))
+        self.dec_initial_weights = tf.get_variable(
+          name="initial_weights",
+          shape=[self.embed_dim, self.h_dim],
+          initializer=tf.random_normal_initializer(
+          mean=0.0, stddev=2.0/(self.h_dim+self.h_dim)))
         self.dec_initial_bias = tf.get_variable(name="initial_bias",
                                        shape=[self.h_dim],
                                        initializer=tf.constant_initializer())
@@ -164,21 +165,29 @@ class Clustering_VAE(Model):
     # Reconstruction loss
     with tf.variable_scope("reconstruction_loss") as scope:
       ''' Expected P(X|Z) under the posterior distribution Q(Z|X): self.cluster_probs'''
-      # [batch_size, data_dimensions] = [B, C] X [C, data_dim]
-      self.E_Q_PX = tf.matmul(self.cluster_probs, self.reconstructed_x)
+      # [B, 1, D]
+      self.x_expand = tf.expand_dims(self.x_input, 1)
+      # [B, C, D]
+      self.difference = tf.sub(self.x_expand, self.reconstructed_x)
+      # [B,C,D]
+      self.sq_diff = tf.pow(self.difference, 2)
+      # Reconstruction loss, for each cluster per batch [B,C]
+      self.loss_per_cluster = tf.reduce_sum(self.sq_diff, 2) / self.data_dimensions
 
-      squared_diff = tf.squared_difference(self.x_input, self.E_Q_PX,
-                                           name="reconstruct_squared_diff")
-      self.reconstruct_loss = tf.reduce_sum(squared_diff,
+      # [batch_size, data_dimensions] = [B, C] * [B, C]
+      self.Q_PX = tf.mul(self.cluster_probs, self.loss_per_cluster)
+
+      self.reconstruct_loss = tf.reduce_sum(self.Q_PX,
                                             name="reconstruct_loss") / self.batch_size
 
       # Want to maximize entropy i.e. push towards uniform posterior
       # Minimize -entropy = \sum{...} - hence no negative
+      #Therefore, no negative means uniform posterior
       self.entropy_loss = tf.reduce_sum(tf.mul(tf.log(self.cluster_probs),
                                                self.cluster_probs),
-                                        name="posterior_entropy") / self.batch_size
+                                        name="posterior_entropy") / (tf.to_float(self.batch_size))
 
-      self.total_loss = self.reconstruct_loss + 0.0 * self.entropy_loss
+      self.total_loss = self.reconstruct_loss #+ 0.0001 * self.entropy_loss
 
       self.optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate)
       self.grads_and_vars = self.optimizer.compute_gradients(self.total_loss,
@@ -224,7 +233,7 @@ class Clustering_VAE(Model):
        total_loss,
        _,
        summary_str) = self.sess.run([self.cluster_probs,
-                           self.E_Q_PX,
+                           self.reconstructed_x,
                            self.reconstruct_loss,
                            self.entropy_loss,
                            self.total_loss,
@@ -308,7 +317,7 @@ class Clustering_VAE(Model):
       cluster_labels = np.argmax(cluster_probs, axis=1).tolist()
       print(cluster_labels)
 
-      
+
 
 
 

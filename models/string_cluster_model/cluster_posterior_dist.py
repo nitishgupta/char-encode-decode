@@ -80,3 +80,7 @@ class ClusterPosteriorDistribution(Model):
       # [batch_size, num_clusters]
       self.cluster_posterior_dist = tf.nn.softmax(logits=self.network_output,
                                                   name="cluster_posterior_distribution")
+      #Get max cluster - self.posterior_model.cluster_posterior_dist - [B,C]
+      self.max_prob_clusters = tf.argmax(input=self.cluster_posterior_dist,
+                                         dimension=1,
+                                    name="max_prob_cluster")

@@ -10,7 +10,7 @@ class LossGraph(Model):
   """Unsupervised Clustering using Discrete-State VAE"""
 
   def __init__(self, batch_size, input_text, text_lengths,
-               decoder_models, posterior_model, num_clusters,
+               decoder_model, posterior_model, num_clusters,
                learning_rate, reg_constant, scope_name):
 
     self.num_clusters = num_clusters
@@ -40,7 +40,7 @@ class LossGraph(Model):
       # self.list_cluster_losses - List of length C with [B] sized vectors
       self.list_cluster_losses = []
 
-      for cluster_num in range(0,self.num_clusters):
+      #for cluster_num in range(0,self.num_clusters):
         # In each iteration, a [batch_size] sized vector is created which is the
         # loss of decoding each seq. in batch starting from this particular
         # cluster embedding
@@ -54,22 +54,25 @@ class LossGraph(Model):
 
         # decoder_models[cluster_num].dec_raw_char_scores :
         # [batch_size * max_length, char_vocab_size]
-        cluster_losses_flat = tf.nn.seq2seq.sequence_loss_by_example(
-          logits=[decoder_models[cluster_num].dec_raw_char_scores],
-          targets=[self.true_char_ids],
-          weights=[mask],
-          average_across_timesteps=False)
+      cluster_losses_flat = tf.nn.seq2seq.sequence_loss_by_example(
+        logits=[decoder_model.dec_raw_char_scores],
+        targets=[self.true_char_ids],
+        weights=[mask],
+        average_across_timesteps=False)
 
-        cluster_losses_each_time_step = tf.reshape(cluster_losses_flat,
+      cluster_losses_each_time_step = tf.reshape(cluster_losses_flat,
                                                  [self.batch_size,
                                                   text_max_length])
-        # [batch_size]
-        # cluster_losses = tf.reduce_sum(
-        #   cluster_losses_each_time_step, [1]) / tf.to_float(text_lengths)
-        cluster_losses = tf.div(
-          tf.reduce_sum(cluster_losses_each_time_step, [1]),
-          tf.to_float(text_lengths))
-        self.list_cluster_losses.append(cluster_losses)
+      # [batch_size]
+      # cluster_losses = tf.reduce_sum(
+      #   cluster_losses_each_time_step, [1]) / tf.to_float(text_lengths)
+
+      self.cluster_losses = tf.div(
+        tf.reduce_sum(cluster_losses_each_time_step, [1]),
+        tf.to_float(text_lengths))
+
+      self.decoding_loss = tf.reduce_sum(self.cluster_losses) / tf.to_float(self.batch_size)
+      #self.list_cluster_losses.append(cluster_losses)
 
         # cluster_loss = tf.reduce_sum(
         #   cluster_loss_batch) / tf.to_float(self.batch_size)
@@ -84,22 +87,22 @@ class LossGraph(Model):
 
       # [B,C] sized tensor, with i-th row containing loss for i-th sequence for
       # each cluster
-      self.losses_per_cluster = tf.pack(
-        self.list_cluster_losses, axis=1)
+      # self.losses_per_cluster = tf.pack(
+      #   self.list_cluster_losses, axis=1)
 
-      self.expected_decoding_loss = tf.reduce_sum(
-        tf.mul(self.losses_per_cluster, posterior_model.cluster_posterior_dist)
-        )/tf.to_float(self.batch_size)
+      # self.expected_decoding_loss = tf.reduce_sum(
+      #   tf.mul(self.losses_per_cluster, posterior_model.cluster_posterior_dist)
+      #   )/tf.to_float(self.batch_size)
 
 
       # Posterior Regularization
-      self.entropy_loss = tf.reduce_sum(
+      self.entropy = tf.reduce_sum(
         tf.mul(tf.log(posterior_model.cluster_posterior_dist),
                posterior_model.cluster_posterior_dist),
         name="posterior_entropy") / (self.batch_size*self.num_clusters)
 
       # Total Loss
-      self.total_loss = self.expected_decoding_loss #+ reg_constant * self.entropy_loss
+      self.total_loss = self.decoding_loss + self.entropy
 
       # Defining optimizer, grads and optmization op
       self.optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate)
@@ -108,8 +111,8 @@ class LossGraph(Model):
                                                              tf.trainable_variables())
       self.optim_op = self.optimizer.apply_gradients(self.grads_and_vars)
 
-      _ = tf.scalar_summary("loss_expected_decoding", self.expected_decoding_loss)
-      _ = tf.scalar_summary("loss_entropy", self.entropy_loss)
+      _ = tf.scalar_summary("loss_decoding", self.decoding_loss)
+      _ = tf.scalar_summary("loss_entropy", self.entropy)
       _ = tf.scalar_summary("loss_total", self.total_loss)
 
   def get_mask(self, text_lengths, text_max_length):

@@ -106,27 +106,23 @@ class String_Clustering_VAE(Model):
         input_batch=self.encoder_model.encoder_last_output,
         scope_name=self.posterior_net_scope)
 
+      print(self.posterior_model.max_prob_clusters)
       # List of decoder_graphs, one for each cluster
       self.decoder_models = []
-      for cluster_num in range(0, self.num_clusters):
-        if cluster_num > 0:
-          scope.reuse_variables()
 
-        # TODO : Pass the posterior prob of cluster and weigh score with that
-        self.decoder_models.append(
-          DecoderModel(num_layers=self.decoder_num_layers,
-                       batch_size=self.batch_size,
-                       h_dim=self.decoder_lstm_size,
-                       dec_input_batch=self.dec_input_batch,
-                       dec_input_lengths=self.text_lengths,
-                       num_char_vocab=self.num_chars,
-                       char_embeddings=self.char_embeddings,
-                       cluster_embeddings=self.cluster_embeddings,
-                       cluster_num=cluster_num,
-                       dropout_keep_prob=self.dropout_keep_prob,
-                       scope_name=self.decoder_net_scope)
-        )
-      #endfor clusters
+      # TODO : Pass the posterior prob of cluster and weigh score with that
+      self.decoder_model = DecoderModel(
+        num_layers=self.decoder_num_layers,
+        batch_size=self.batch_size,
+        h_dim=self.decoder_lstm_size,
+        dec_input_batch=self.dec_input_batch,
+        dec_input_lengths=self.text_lengths,
+        num_char_vocab=self.num_chars,
+        char_embeddings=self.char_embeddings,
+        cluster_embeddings=self.cluster_embeddings,
+        max_prob_clusters=self.posterior_model.max_prob_clusters,
+        dropout_keep_prob=self.dropout_keep_prob,
+        scope_name=self.decoder_net_scope)
 
     self.encoder_train_vars = self.scope_vars_list(
       scope_name=self.encoder_net_scope,
@@ -194,7 +190,7 @@ class String_Clustering_VAE(Model):
     self.loss_graph = LossGraph(batch_size=self.batch_size,
                                 input_text=self.in_text,
                                 text_lengths=self.text_lengths,
-                                decoder_models=self.decoder_models,
+                                decoder_model=self.decoder_model,
                                 posterior_model=self.posterior_model,
                                 num_clusters=self.num_clusters,
                                 learning_rate=self.learning_rate,
@@ -254,10 +250,9 @@ class String_Clustering_VAE(Model):
                    self.dec_input_batch: dec_in_text_batch,
                    self.text_lengths: text_lengths}
       fetches = [self.posterior_model.cluster_posterior_dist,
-                 self.loss_graph.losses_per_cluster,
-                 self.loss_graph.expected_decoding_loss,
-                 self.loss_graph.entropy_loss,
                  self.loss_graph.total_loss,
+                 self.loss_graph.decoding_loss,
+                 self.loss_graph.entropy,
                  self.posterior_model.network_output,
                  self.encoder_model.encoder_last_output]
 
@@ -271,10 +266,9 @@ class String_Clustering_VAE(Model):
       self.global_step.assign(epoch).eval()
 
       [cluster_posterior_dist,
-       losses_per_cluster,
-       expected_decoding_loss,
-       entropy_loss,
        total_loss,
+       decoding_loss,
+       entropy,
        post_model_out,
        encoder_last_output] = fetches
 
@@ -284,11 +278,9 @@ class String_Clustering_VAE(Model):
         print("\nText : %s " % text)
 
         print("Step: [%2d] Traindata epoch: [%4d] time: %4.2f,"
-              " Entropy Loss: [%.5f], Decoding Loss Average: [%.5f],"
-              " Total Loss: %.5f"
+              " Total Loss: %.5f, Decoding Loss: %.5f, Entropy: %.5f"
               % (epoch, self.reader.data_epochs[0],
-                 time.time() - start_time, entropy_loss,
-                 expected_decoding_loss, total_loss))
+                 time.time() - start_time, total_loss, decoding_loss, entropy))
 
         #print("encoder_last_output")
         #print(encoder_last_output)
@@ -299,6 +291,11 @@ class String_Clustering_VAE(Model):
         print("cluster post")
         print(cluster_posterior_dist)
 
+        print("Max Prob")
+        print(np.amax(cluster_posterior_dist, axis=1))
+        print("Max Prob Index")
+        print(np.argmax(cluster_posterior_dist, axis=1))
+
         # print("Losses per cluster")
         # print(losses_per_cluster)
 
@@ -307,7 +304,7 @@ class String_Clustering_VAE(Model):
       if epoch % 2 == 0:
         writer.add_summary(summary_str, epoch)
 
-      if epoch != 0 and epoch % 500 == 0:
+      if epoch != 0 and epoch % 1000 == 0:
         self.save(checkpoint_dir=self.checkpoint_dir,
                   var_list=self.cluster_model_trainable_vars,
                   attrs=self._attrs,

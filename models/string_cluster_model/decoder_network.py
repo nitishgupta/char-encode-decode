@@ -11,7 +11,7 @@ class DecoderModel(Model):
 
   def __init__(self, num_layers, batch_size, h_dim, dec_input_batch,
                dec_input_lengths, num_char_vocab,
-               char_embeddings, cluster_embeddings, cluster_num,
+               char_embeddings, cluster_embeddings, max_prob_clusters,
                scope_name, dropout_keep_prob=1.0):
 
     self.num_layers = num_layers  # Num of layers in the encoder and decoder network
@@ -24,10 +24,12 @@ class DecoderModel(Model):
     self.batch_size = batch_size
 
     with tf.variable_scope(scope_name) as scope:
+      # max_prob_clusters - [B,1]. Embedding lookup -  [B, embed_dim]
+      # For each sequence, this is now the cluster embedding that has highest
+      # posterior prob
       cluster_embedding = tf.nn.embedding_lookup(self.cluster_embeddings,
-                                                 cluster_num,
-                                                 name="get_cluster_embedding")
-      cluster_embedding = tf.pack(self.batch_size * [cluster_embedding])
+                                                 max_prob_clusters,
+                                                 name="get_cluster_embeddings")
 
       decoder_cell = tf.nn.rnn_cell.BasicLSTMCell(self.h_dim,
                                                   state_is_tuple=True)

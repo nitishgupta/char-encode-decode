@@ -2,7 +2,7 @@ import os
 import numpy as np
 import tensorflow as tf
 np.set_printoptions(threshold=np.inf)
-np.set_printoptions(precision=4)
+np.set_printoptions(precision=7)
 
 from utils import pp
 from readers.string_cluster_reader import StringClusteringReader
@@ -13,13 +13,13 @@ flags = tf.app.flags
 flags.DEFINE_float("learning_rate", 0.001, "Learning rate of adam optimizer [0.001]")
 flags.DEFINE_float("decay_rate", 0.96, "Decay rate of learning rate [0.96]")
 flags.DEFINE_float("decay_step", 10000, "# of decay step for learning rate decaying [10000]")
-flags.DEFINE_integer("max_steps", 100, "Maximum of iteration [450000]")
-flags.DEFINE_integer("pretraining_steps", 10000, "Number of steps to run pretraining")
+flags.DEFINE_integer("max_steps", 30000, "Maximum of iteration [450000]")
+flags.DEFINE_integer("pretraining_steps", 30000, "Number of steps to run pretraining")
 flags.DEFINE_string("model", "string_clustering", "The name of model [nvdm, nasm]")
 flags.DEFINE_string("dataset", "freebase_alias", "The name of dataset [ptb]")
 flags.DEFINE_string("checkpoint_dir", "checkpoint", "Directory name to save the checkpoints [checkpoints]")
 flags.DEFINE_boolean("inference", False, "False for training, True for testing [False]")
-flags.DEFINE_integer("batch_size", 100, "Batch Size for training and testing")
+flags.DEFINE_integer("batch_size", 50, "Batch Size for training and testing")
 flags.DEFINE_integer("char_embedding_dim", 50, "Character Embedding Size")
 flags.DEFINE_integer("num_clusters", 1, "Number of clusters to induce")
 flags.DEFINE_integer("cluster_embed_dim", 100, "Cluster Embedding Size")

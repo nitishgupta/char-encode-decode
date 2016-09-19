@@ -84,17 +84,18 @@ class String_Clustering_VAE(Model):
 
       ## Decoder Network from Pre-training.
       # Keeping same number of layers and hidden units as encoder
-      self.pretraining_decoder = PreTrainingDecoderModel(
-        num_layers=self.encoder_num_layers,
+      self.pretraining_decoder = DecoderModel(
+        num_layers=self.decoder_num_layers,
         batch_size=self.batch_size,
-        h_dim=self.encoder_lstm_size,
+        h_dim=self.decoder_lstm_size,
         dec_input_batch=self.dec_input_batch,
         dec_input_lengths=self.text_lengths,
         num_char_vocab=self.num_chars,
         char_embeddings=self.char_embeddings,
-        encoder_last_output=self.encoder_model.encoder_last_output,
-        dropout_keep_prob=self.dropout_keep_prob,
-        scope_name=self.pretraining_decoder_net_scope)
+        input_state_vectors=self.encoder_model.encoder_last_output,
+        scope_name=self.decoder_net_scope,
+        reuse_variables=False,
+        dropout_keep_prob=self.dropout_keep_prob)
 
       # Posterior Distribution calculation from Encoder Last Output
       self.posterior_model = ClusterPosteriorDistribution(
@@ -103,12 +104,21 @@ class String_Clustering_VAE(Model):
         h_dim=self.ff_hidden_layer_size,
         data_dimensions=self.encoder_lstm_size,
         num_clusters=self.num_clusters,
+        cluster_embeddings=self.cluster_embeddings,
         input_batch=self.encoder_model.encoder_last_output,
         scope_name=self.posterior_net_scope)
 
+      print(self.posterior_model.cluster_posterior_dist)
       print(self.posterior_model.max_prob_clusters)
-      # List of decoder_graphs, one for each cluster
-      self.decoder_models = []
+      # max_prob_clusters - [B,1]. Embedding lookup -  [B, embed_dim]
+      # For each sequence, this is now the cluster embedding that has highest
+      # posterior prob
+      self.max_cluster_embeddings = tf.nn.embedding_lookup(
+        self.cluster_embeddings,
+        self.posterior_model.max_prob_clusters,
+        name="get_max_prob_cluster_embeddings")
+
+      print(self.max_cluster_embeddings)
 
       # TODO : Pass the posterior prob of cluster and weigh score with that
       self.decoder_model = DecoderModel(
@@ -119,17 +129,17 @@ class String_Clustering_VAE(Model):
         dec_input_lengths=self.text_lengths,
         num_char_vocab=self.num_chars,
         char_embeddings=self.char_embeddings,
-        cluster_embeddings=self.cluster_embeddings,
-        max_prob_clusters=self.posterior_model.max_prob_clusters,
-        dropout_keep_prob=self.dropout_keep_prob,
-        scope_name=self.decoder_net_scope)
+        input_state_vectors=self.max_cluster_embeddings,
+        scope_name=self.decoder_net_scope,
+        reuse_variables=True,
+        dropout_keep_prob=self.dropout_keep_prob)
 
     self.encoder_train_vars = self.scope_vars_list(
       scope_name=self.encoder_net_scope,
       var_list=tf.trainable_variables())
-    self.pretraining_decoder_train_vars = self.scope_vars_list(
-      scope_name=self.pretraining_decoder_net_scope,
-      var_list=tf.trainable_variables())
+    # self.pretraining_decoder_train_vars = self.scope_vars_list(
+    #   scope_name=self.pretraining_decoder_net_scope,
+    #   var_list=tf.trainable_variables())
     self.posterior_train_vars = self.scope_vars_list(
       scope_name=self.posterior_net_scope,
       var_list=tf.trainable_variables())
@@ -139,21 +149,24 @@ class String_Clustering_VAE(Model):
 
     self.pretraining_trainable_vars = [self.pretrain_global_step,
                                        self.char_embeddings]
+    #self.pretraining_trainable_vars.extend(self.encoder_train_vars +
+    #                                       self.pretraining_decoder_train_vars)
     self.pretraining_trainable_vars.extend(self.encoder_train_vars +
-                                           self.pretraining_decoder_train_vars)
-
+                                           self.decoder_train_vars)
     self.cluster_model_trainable_vars = [self.global_step,
-                                         self.char_embeddings,
+                                         #self.char_embeddings,
                                          self.cluster_embeddings]
-    self.cluster_model_trainable_vars.extend(self.encoder_train_vars +
-                                             self.posterior_train_vars +
-                                             self.decoder_train_vars)
+    # self.cluster_model_trainable_vars.extend(self.encoder_train_vars +
+    #                                          self.posterior_train_vars +
+    #                                          self.decoder_train_vars)
 
-    #self.print_variables_in_collection(
-    #  self.pretraining_trainable_vars)
+    print("Pretrianing variables")
+    self.print_variables_in_collection(
+      self.pretraining_trainable_vars)
 
-    #self.print_variables_in_collection(
-    #  self.cluster_model_trainable_vars)
+    print("Cluster Model training variables")
+    self.print_variables_in_collection(
+      self.cluster_model_trainable_vars)
 
 
   def build_placeholders(self):
@@ -179,7 +192,7 @@ class String_Clustering_VAE(Model):
         name=self.cluster_embeddings_var_name,
         shape=[self.num_clusters, self.cluster_embed_dim],
         initializer=tf.random_normal_initializer(
-          mean=0.0, stddev=1.0/(self.num_clusters+self.cluster_embed_dim)))
+          mean=0.0, stddev=1.0/(self.cluster_embed_dim)))
 
 
   def train(self, config):
@@ -194,6 +207,7 @@ class String_Clustering_VAE(Model):
                                 posterior_model=self.posterior_model,
                                 num_clusters=self.num_clusters,
                                 learning_rate=self.learning_rate,
+                                trainable_vars=self.cluster_model_trainable_vars,
                                 reg_constant=self.reg_constant,
                                 scope_name=self.loss_graph_scope)
 
@@ -234,6 +248,8 @@ class String_Clustering_VAE(Model):
                                      attrs=self._pretrain_attrs)
     pretraining_steps = self.pretrain_global_step.eval()
     print("Number of pretraining steps done : %d" % pretraining_steps)
+
+
     start = self.global_step.eval()
 
     print("Training steps done: %d" % start)
@@ -253,8 +269,10 @@ class String_Clustering_VAE(Model):
                  self.loss_graph.total_loss,
                  self.loss_graph.decoding_loss,
                  self.loss_graph.entropy,
-                 self.posterior_model.network_output,
-                 self.encoder_model.encoder_last_output]
+                 self.decoder_model.raw_scores,
+                 self.encoder_model.encoder_last_output,
+                 self.posterior_model.posterior_logits,
+                 self.posterior_model.max_prob_clusters]
 
       (fetches,
        _,
@@ -269,8 +287,10 @@ class String_Clustering_VAE(Model):
        total_loss,
        decoding_loss,
        entropy,
-       post_model_out,
-       encoder_last_output] = fetches
+       raw_scores,
+       encoder_last_output,
+       posterior_logits,
+       max_prob_clusters] = fetches
 
       if epoch % 10 == 0:
         ### DEBUG
@@ -285,16 +305,14 @@ class String_Clustering_VAE(Model):
         #print("encoder_last_output")
         #print(encoder_last_output)
 
-        # print("post model out")
-        # print(post_model_out)
-
-        print("cluster post")
-        print(cluster_posterior_dist)
+        # print("posterior logits")
+        # print(posterior_logits[0])
 
         print("Max Prob")
         print(np.amax(cluster_posterior_dist, axis=1))
-        print("Max Prob Index")
-        print(np.argmax(cluster_posterior_dist, axis=1))
+
+        print("max_prob_clusters")
+        print(max_prob_clusters)
 
         # print("Losses per cluster")
         # print(losses_per_cluster)
@@ -309,6 +327,16 @@ class String_Clustering_VAE(Model):
                   var_list=self.cluster_model_trainable_vars,
                   attrs=self._attrs,
                   global_step=self.global_step)
+        #debug
+        char_ids = np.argmax(raw_scores, axis=2)
+        print("Decoded : ")
+        for i in range(0, 10):
+          t, tt = self.reader.charidx_to_text(char_ids[i])
+          print(tt)
+        print("Truth : ")
+        for i in range(0, 10):
+          t, tt = self.reader.charidx_to_text(orig_text_batch[i])
+          print(tt)
 
   def pretraining(self):
     # Make the loss graph
@@ -317,6 +345,7 @@ class String_Clustering_VAE(Model):
       input_text=self.in_text,
       text_lengths=self.text_lengths,
       learning_rate=self.learning_rate,
+      trainable_variables=self.pretraining_trainable_vars,
       scope_name=self.pretrain_loss_graph_scope)
 
     self.pretrain_loss_vars = self.scope_vars_list(
@@ -334,6 +363,7 @@ class String_Clustering_VAE(Model):
     load_status = self.load(checkpoint_dir=self.checkpoint_dir,
                             var_list=self.pretraining_trainable_vars,
                             attrs=self._pretrain_attrs)
+
 
     # Initialize pretraining loss graph model variables
     self.sess.run(tf.initialize_variables(self.pretrain_loss_vars))

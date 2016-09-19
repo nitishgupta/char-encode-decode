@@ -80,7 +80,7 @@ class PreTrainingDecoderModel(Model):
                                       name="concat_cluster_emb_decoder_in")
 
   def pretrain_loss_graph(self, input_text, text_lengths, learning_rate,
-                          scope_name):
+                          trainable_variables, scope_name):
     self.learning_rate = learning_rate
 
     with   tf.variable_scope(scope_name) as scope:
@@ -111,7 +111,7 @@ class PreTrainingDecoderModel(Model):
       self.optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate)
 
       self.grads_and_vars = self.optimizer.compute_gradients(self.loss,
-                                                             tf.trainable_variables())
+                                                             trainable_variables)
       self.optim_op = self.optimizer.apply_gradients(self.grads_and_vars)
 
       _ = tf.scalar_summary("loss_pretraining", self.loss)

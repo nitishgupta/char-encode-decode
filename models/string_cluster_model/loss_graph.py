@@ -11,7 +11,8 @@ class LossGraph(Model):
 
   def __init__(self, batch_size, input_text, text_lengths,
                decoder_model, posterior_model, num_clusters,
-               learning_rate, reg_constant, scope_name):
+               learning_rate, trainable_vars,
+               reg_constant, scope_name):
 
     self.num_clusters = num_clusters
     self.batch_size = batch_size
@@ -96,19 +97,22 @@ class LossGraph(Model):
 
 
       # Posterior Regularization
+      # Want to maximize entropy i.e. push towards uniform posterior
+      # Minimize -entropy = \sum{...} - hence no negative
+      # Therefore, no negative means uniform posterior
       self.entropy = tf.reduce_sum(
         tf.mul(tf.log(posterior_model.cluster_posterior_dist),
                posterior_model.cluster_posterior_dist),
-        name="posterior_entropy") / (self.batch_size*self.num_clusters)
+        name="posterior_entropy") / (self.batch_size)
 
       # Total Loss
-      self.total_loss = self.decoding_loss + self.entropy
+      self.total_loss = self.decoding_loss #+ self.entropy
 
       # Defining optimizer, grads and optmization op
       self.optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate)
 
       self.grads_and_vars = self.optimizer.compute_gradients(self.total_loss,
-                                                             tf.trainable_variables())
+                                                             trainable_vars)
       self.optim_op = self.optimizer.apply_gradients(self.grads_and_vars)
 
       _ = tf.scalar_summary("loss_decoding", self.decoding_loss)

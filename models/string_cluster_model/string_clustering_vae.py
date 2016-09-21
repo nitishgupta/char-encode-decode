@@ -45,6 +45,9 @@ class String_Clustering_VAE(Model):
     self.ff_num_layers = ff_num_layers
     self.ff_hidden_layer_size = ff_hidden_layer_size
 
+    self.learning_rate = learning_rate
+    self.checkpoint_dir = checkpoint_dir
+
     self.embeddings_scope = "embeddings"
     self.char_embeddings_var_name = "char_embeddings"
     self.cluster_embeddings_var_name = "cluster_embeddings"
@@ -55,10 +58,12 @@ class String_Clustering_VAE(Model):
     self.pretrain_loss_graph_scope = "pretrain_loss_graph"
     self.loss_graph_scope = "string_clustering_vae_loss_graph"
 
+
     self._attrs=["char_embedding_dim", "num_clusters", "cluster_embed_dim",
                  "encoder_num_layers", "encoder_lstm_size",
                  "decoder_num_layers", "decoder_lstm_size",
-                 "ff_number_layers", "ff_hidden_layer_size"]
+                 "ff_number_layers", "ff_hidden_layer_size",
+                 "learning_rate"]
 
     self._pretrain_attrs=["char_embedding_dim", "encoder_num_layers",
                           "encoder_lstm_size"]
@@ -67,9 +72,6 @@ class String_Clustering_VAE(Model):
       self.global_step = tf.Variable(0, name='global_step', trainable=False)
       self.pretrain_global_step = tf.Variable(0, name='pretrain_global_step',
                                               trainable=False)
-
-      self.learning_rate = learning_rate
-      self.checkpoint_dir = checkpoint_dir
 
       self.build_placeholders()
 
@@ -110,6 +112,7 @@ class String_Clustering_VAE(Model):
 
       print(self.posterior_model.cluster_posterior_dist)
       print(self.posterior_model.max_prob_clusters)
+
       # max_prob_clusters - [B,1]. Embedding lookup -  [B, embed_dim]
       # For each sequence, this is now the cluster embedding that has highest
       # posterior prob
@@ -156,9 +159,10 @@ class String_Clustering_VAE(Model):
     self.cluster_model_trainable_vars = [self.global_step,
                                          #self.char_embeddings,
                                          self.cluster_embeddings]
-    # self.cluster_model_trainable_vars.extend(self.encoder_train_vars +
-    #                                          self.posterior_train_vars +
-    #                                          self.decoder_train_vars)
+    self.cluster_model_trainable_vars.extend(self.posterior_train_vars
+                                             #+ self.encoder_train_vars
+                                             + self.decoder_train_vars
+                                             )
 
     print("Pretrianing variables")
     self.print_variables_in_collection(
@@ -272,7 +276,8 @@ class String_Clustering_VAE(Model):
                  self.decoder_model.raw_scores,
                  self.encoder_model.encoder_last_output,
                  self.posterior_model.posterior_logits,
-                 self.posterior_model.max_prob_clusters]
+                 self.posterior_model.max_prob_clusters,
+                 self.posterior_model.posterior_logits_befVar]
 
       (fetches,
        _,
@@ -290,7 +295,8 @@ class String_Clustering_VAE(Model):
        raw_scores,
        encoder_last_output,
        posterior_logits,
-       max_prob_clusters] = fetches
+       max_prob_clusters,
+       posteriorlogits_befvar] = fetches
 
       if epoch % 10 == 0:
         ### DEBUG
@@ -302,11 +308,11 @@ class String_Clustering_VAE(Model):
               % (epoch, self.reader.data_epochs[0],
                  time.time() - start_time, total_loss, decoding_loss, entropy))
 
-        #print("encoder_last_output")
-        #print(encoder_last_output)
+        # print("encoder_last_output")
+        # print(encoder_last_output)
 
         # print("posterior logits")
-        # print(posterior_logits[0])
+        # print(posterior_logits)
 
         print("Max Prob")
         print(np.amax(cluster_posterior_dist, axis=1))

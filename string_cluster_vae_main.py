@@ -14,14 +14,14 @@ flags.DEFINE_float("learning_rate", 0.001, "Learning rate of adam optimizer [0.0
 flags.DEFINE_float("decay_rate", 0.96, "Decay rate of learning rate [0.96]")
 flags.DEFINE_float("decay_step", 10000, "# of decay step for learning rate decaying [10000]")
 flags.DEFINE_integer("max_steps", 60000, "Maximum of iteration [450000]")
-flags.DEFINE_integer("pretraining_steps", 29000, "Number of steps to run pretraining")
+flags.DEFINE_integer("pretraining_steps", 29500, "Number of steps to run pretraining")
 flags.DEFINE_string("model", "string_clustering", "The name of model [nvdm, nasm]")
 flags.DEFINE_string("dataset", "freebase_alias", "The name of dataset [ptb]")
 flags.DEFINE_string("checkpoint_dir", "checkpoint", "Directory name to save the checkpoints [checkpoints]")
 flags.DEFINE_boolean("inference", False, "False for training, True for testing [False]")
 flags.DEFINE_integer("batch_size", 100, "Batch Size for training and testing")
 flags.DEFINE_integer("char_embedding_dim", 50, "Character Embedding Size")
-flags.DEFINE_integer("num_clusters", 1000, "Number of clusters to induce")
+flags.DEFINE_integer("num_clusters", 10000, "Number of clusters to induce")
 flags.DEFINE_integer("cluster_embed_dim", 100, "Cluster Embedding Size")
 flags.DEFINE_integer("encoder_num_layers", 1, "Num of Layers in encoder network")
 flags.DEFINE_integer("encoder_lstm_size", 100, "Size of encoder lstm layers")
@@ -46,10 +46,9 @@ DATA_READER = {
 
 def main(_):
   pp.pprint(flags.FLAGS.__flags)
-
-  data_path = "./data/%s" % FLAGS.dataset
+  data_dir="./data/"
   DataLoader = DATA_READER[FLAGS.model]
-  reader = DataLoader(data_dir="./data", dataset_name=FLAGS.dataset,
+  reader = DataLoader(data_dir=data_dir, dataset_name=FLAGS.dataset,
                       batch_size=FLAGS.batch_size)
   config_proto = tf.ConfigProto()
   config_proto.gpu_options.allow_growth=True

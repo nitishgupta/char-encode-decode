@@ -517,11 +517,13 @@ class String_Clustering_VAE(Model):
     start = self.pretrain_global_step.eval()
     print("Pre-Training epochs done: %d" % start)
 
-    for num in range(0, 20):
+    while True:
       (orig_text_batch,
        dec_in_text_batch,
        text_lengths,
        ids_batch) = self.reader.next_test_batch()
+      if self.reader.data_epochs[1] >= 1:
+        break;
 
       feed_dict = {self.in_text: orig_text_batch,
                    self.text_lengths: text_lengths}
@@ -572,6 +574,8 @@ class String_Clustering_VAE(Model):
 
       t, tt = self.reader.charidx_to_text(decoded_sequence)
       print(tt)
+      print("\n")
+    #end while
 
 
   def get_states_list(self, states):
